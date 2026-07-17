@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>EV Active Sound GPS</title>
+<style>
+  :root {
+    --bg: #06090f;
+    --panel: #0c121c;
+    --panel2: #111a27;
+    --line: #1b2636;
+    --text: #dfe7f2;
+    --dim: #5f7188;
+    --cyan: #35d6ff;
+    --cyan-dim: #1a5f75;
+    --red: #ff4652;
+    --ok: #2fe08a;
+    --amber: #ffc44d;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, #0e1a2a 0%, transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 14px;
+    user-select: none;
+  }
+  .app { width: 100%; max-width: 1150px; display: flex; flex-direction: column; gap: 12px; }
+
+  /* ---------- header ---------- */
+  header { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px; }
+  .logo { font-size: 17px; font-weight: 700; letter-spacing: 4px; }
+  .logo b { color: var(--cyan); font-weight: 700; }
+  .badge {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; letter-spacing: 2px; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 20px; padding: 6px 14px;
+    background: var(--panel);
+  }
+  .badge .dot { width: 8px; height: 8px; border-radius: 50%; background: #444; }
+  .badge.live { color: var(--ok); border-color: #1b4a35; }
+  .badge.live .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .badge.err { color: var(--red); }
+  .badge.err .dot { background: var(--red); }
+
+  /* ---------- main grid ---------- */
+  .main { display: grid; grid-template-columns: 1fr 1.1fr; gap: 12px; }
+  @media (max-width: 760px) { .main { grid-template-columns: 1fr; } }
+  .card {
+    background: linear-gradient(180deg, var(--panel2), var(--panel));
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px;
+  }
+  .card h2 {
+    font-size: 11px; font-weight: 600; letter-spacing: 3px;
+    color: var(--dim); margin-bottom: 12px;
+  }
+  .card h2 span { color: var(--cyan); }
+
+  /* ---------- gauge ---------- */
+  .gauge-card { display: flex; flex-direction: column; align-items: center; }
+  .gauge-wrap { position: relative; width: min(300px, 70vw); }
+  .gauge-wrap svg { width: 100%; display: block; }
+  .gauge-center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .gauge-center .spd {
+    font-size: 74px; font-weight: 800; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 24px rgba(53, 214, 255, 0.35);
+  }
+  .gauge-center .unit { font-size: 13px; letter-spacing: 3px; color: var(--cyan); margin-top: 4px; }
+  .rpm-line {
+    width: 100%; margin-top: 6px;
+    display: flex; align-items: baseline; justify-content: space-between;
+  }
+  .rpm-line .lab { font-size: 11px; letter-spacing: 2px; color: var(--dim); }
+  .rpm-line .val { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .rpm-line .gear { font-size: 15px; color: var(--cyan); font-weight: 700; }
+  .rpm-track {
+    width: 100%; height: 6px; margin-top: 6px;
+    background: #0a1420; border-radius: 3px; overflow: hidden;
+  }
+  .rpm-track > div {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--cyan), var(--amber) 70%, var(--red));
+  }
+
+  /* ---------- telemetry ---------- */
+  .tele-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #101a28; }
+  .tele-row:last-child { border-bottom: none; }
+  .tele-row .lab { width: 130px; font-size: 11px; letter-spacing: 2px; color: var(--dim); flex: none; }
+  .tele-bar { flex: 1; height: 5px; background: #0a1420; border-radius: 3px; overflow: hidden; }
+  .tele-bar > div { height: 100%; width: 0%; background: var(--cyan); transition: width 0.15s linear; }
+  .tele-row .val {
+    width: 92px; text-align: right; font-size: 15px; font-weight: 600;
+    font-variant-numeric: tabular-nums; flex: none;
+  }
+  .tele-row .val small { color: var(--dim); font-size: 10px; font-weight: 400; }
+
+  /* ---------- visualizer ---------- */
+  canvas { width: 100%; display: block; }
+  #wave { height: 84px; }
+  #eq { height: 64px; margin-top: 10px; }
+
+  /* ---------- profiles ---------- */
+  .profiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  @media (max-width: 760px) { .profiles { grid-template-columns: repeat(3, 1fr); } }
+  .profiles button {
+    flex: 1; padding: 15px 4px;
+    font-size: 12px; font-weight: 700; letter-spacing: 2px;
+    background: var(--panel); color: var(--dim);
+    border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
+  }
+  .profiles button.active {
+    background: linear-gradient(180deg, #1391c4, #0d6d96);
+    border-color: var(--cyan); color: #fff;
+    box-shadow: 0 0 18px rgba(53, 214, 255, 0.25);
+  }
+  .profiles button:disabled { opacity: 0.35; cursor: default; }
+  .profiles button.real::before { content: "● "; color: var(--amber); font-size: 8px; vertical-align: 2px; }
+  .profiles button.real.active {
+    background: linear-gradient(180deg, #b7791f, #8a5a12);
+    border-color: var(--amber); color: #fff;
+    box-shadow: 0 0 18px rgba(255, 196, 77, 0.25);
+  }
+
+  /* ---------- controls ---------- */
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .controls button {
+    padding: 15px 26px; font-size: 14px; font-weight: 700; letter-spacing: 2px;
+    border-radius: 12px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); cursor: pointer;
+  }
+  #startBtn { background: linear-gradient(180deg, #16a34a, #15803d); border-color: #22c55e; color: #fff; min-width: 190px; }
+  #startBtn.on { background: linear-gradient(180deg, #b91c1c, #991b1b); border-color: var(--red); }
+  #muteBtn.on { background: var(--amber); color: #111; border-color: var(--amber); }
+  .vol-box { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 180px; }
+  .vol-box .lab { font-size: 11px; letter-spacing: 2px; color: var(--dim); }
+  input[type=range] { flex: 1; height: 34px; accent-color: var(--cyan); }
+  .upload-lab {
+    padding: 15px 20px; font-size: 13px; font-weight: 600;
+    border: 1px dashed #2a3c55; border-radius: 12px; color: var(--cyan);
+    cursor: pointer; background: rgba(53, 214, 255, 0.04);
+  }
+  #fileInput { display: none; }
+
+  .sub-row { display: none; align-items: center; gap: 12px; }
+  .sub-row.show { display: flex; }
+  .sub-row .lab { font-size: 12px; color: var(--dim); min-width: 150px; }
+  .sub-row .val { font-size: 13px; color: var(--cyan); min-width: 70px; text-align: right; }
+
+  .toggle { display: flex; align-items: center; gap: 9px; cursor: pointer; color: var(--dim); font-size: 13px; }
+  .toggle input { width: 20px; height: 20px; accent-color: var(--cyan); }
+
+  .status {
+    display: flex; gap: 10px; align-items: center;
+    font-size: 13px; color: var(--dim);
+    padding: 10px 16px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">EV <b>ACTIVE SOUND</b></div>
+    <div class="badge" id="gpsBadge"><div class="dot"></div><span id="gpsBadgeText">GPS OFF</span></div>
+  </header>
+
+  <div class="main">
+    <div class="card gauge-card">
+      <h2>CURRENT <span>SPEED</span></h2>
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 200 200">
+          <defs>
+            <linearGradient id="arcGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#0e7490"/>
+              <stop offset="60%" stop-color="#35d6ff"/>
+              <stop offset="100%" stop-color="#a5f3fc"/>
+            </linearGradient>
+          </defs>
+          <circle cx="100" cy="100" r="84" fill="none" stroke="#101a28" stroke-width="10"
+                  stroke-linecap="round" stroke-dasharray="395.8 527.8"
+                  transform="rotate(135 100 100)"/>
+          <circle id="speedArc" cx="100" cy="100" r="84" fill="none" stroke="url(#arcGrad)"
+                  stroke-width="10" stroke-linecap="round" stroke-dasharray="0 527.8"
+                  transform="rotate(135 100 100)"/>
+        </svg>
+        <div class="gauge-center">
+          <div class="spd" id="speedVal">0</div>
+          <div class="unit">KM/H</div>
+        </div>
+      </div>
+      <div class="rpm-line">
+        <span class="lab">VIRTUAL RPM</span>
+        <span class="val" id="rpmVal">0</span>
+        <span class="gear">GEAR <span id="gearVal">N</span></span>
+      </div>
+      <div class="rpm-track"><div id="rpmBar"></div></div>
+    </div>
+
+    <div class="card">
+      <h2>DRIVING <span>TELEMETRY</span></h2>
+      <div class="tele-row">
+        <span class="lab">MOTOR LOAD</span>
+        <div class="tele-bar"><div id="loadBar"></div></div>
+        <span class="val" id="loadVal">0<small> %</small></span>
+      </div>
+      <div class="tele-row">
+        <span class="lab">ACCELERATION</span>
+        <div class="tele-bar"><div id="accBar"></div></div>
+        <span class="val" id="accVal">0.00<small> km/h/s</small></span>
+      </div>
+      <div class="tele-row">
+        <span class="lab">MOTOR TEMP</span>
+        <div class="tele-bar"><div id="tempBar"></div></div>
+        <span class="val" id="tempVal">32<small> °C</small></span>
+      </div>
+      <div class="tele-row">
+        <span class="lab">SOUND OUTPUT</span>
+        <div class="tele-bar"><div id="outBar"></div></div>
+        <span class="val" id="outVal">0<small> %</small></span>
+      </div>
+      <h2 style="margin-top:14px">AUDIO <span>WAVEFORM</span></h2>
+      <canvas id="wave"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="padding:12px 16px">
+    <canvas id="eq"></canvas>
+  </div>
+
+  <div class="profiles" id="profiles">
+    <button data-p="comfort">COMFORT</button>
+    <button data-p="standard" class="active">STANDARD</button>
+    <button data-p="sport">SPORT</button>
+    <button data-p="track">TRACK</button>
+    <button data-p="cyber">CYBER</button>
+    <button data-p="s58">BMW S58</button>
+    <button data-p="p911">PORSCHE 911</button>
+    <button data-p="taycan">TAYCAN</button>
+    <button data-p="mario">MARIO KART</button>
+    <button data-p="rHura" class="real" disabled>HURACÁN V10</button>
+    <button data-p="rAvent" class="real" disabled>AVENTADOR V12</button>
+    <button data-p="rGt3" class="real" disabled>911 GT3</button>
+    <button data-p="rBmwV10" class="real" disabled>BMW M V10</button>
+    <button data-p="custom" id="customBtn" disabled>CUSTOM</button>
+  </div>
+
+  <div class="controls card">
+    <button id="startBtn">▶ START</button>
+    <button id="muteBtn">MUTE</button>
+    <div class="vol-box">
+      <span class="lab">VOL</span>
+      <input type="range" id="volume" min="0" max="100" value="65">
+    </div>
+    <label class="upload-lab" for="fileInput">⬆ อัปโหลดเสียง</label>
+    <input type="file" id="fileInput" accept="audio/*">
+    <label class="toggle"><input type="checkbox" id="demoChk"> โหมดทดสอบ</label>
+  </div>
+
+  <div class="card sub-row" id="demoBox">
+    <span class="lab">ความเร็วจำลอง (km/h)</span>
+    <input type="range" id="demoSpeed" min="0" max="220" value="0">
+    <span class="val" id="demoVal">0</span>
+  </div>
+
+  <div class="card sub-row" id="tuneBox">
+    <span class="lab">จูนเสียงอัปโหลด (รอบอ้างอิง)</span>
+    <input type="range" id="baseRpm" min="1000" max="5000" step="100" value="2500">
+    <span class="val" id="baseRpmVal">2500</span>
+  </div>
+
+  <div class="status">
+    <span id="statusText">พร้อมใช้งาน — กด START เพื่อเริ่ม (จะขอสิทธิ์ GPS) หรือเปิดโหมดทดสอบเพื่อลองเสียง</span>
+  </div>
+
+</div>
+
+<script src="sounds.js"></script>
+<script>
+"use strict";
+
+/* ================================================================
+   Sound profiles
+   ================================================================ */
+const PROFILES = {
+  comfort: {
+    label: "COMFORT", cylFactor: 3, idleRPM: 620, maxRPM: 5200,
+    gears: [25, 50, 85, 125, 170, 230],
+    harmonics: [
+      { mult: 0.5, wave: "sine",    gain: 0.55 },
+      { mult: 1.0, wave: "engine",  gain: 0.35, rolloff: 2.2, evenMix: 0.7 },
+      { mult: 2.0, wave: "sine",    gain: 0.10 },
+    ],
+    drive: 1.4, amDepth: 0.14, jitter: 5,
+    noiseGain: 0.07, noiseMult: 2.0, lowpass: 1400,
+  },
+  standard: {
+    label: "STANDARD", cylFactor: 4, idleRPM: 780, maxRPM: 6600,
+    gears: [24, 48, 78, 112, 155, 215],
+    harmonics: [
+      { mult: 0.5, wave: "engine",  gain: 0.50, rolloff: 1.6, evenMix: 0.4 },
+      { mult: 1.0, wave: "engine",  gain: 0.42, rolloff: 1.3, evenMix: 0.6 },
+      { mult: 1.5, wave: "engine",  gain: 0.14, rolloff: 1.8, evenMix: 1.0 },
+      { mult: 2.0, wave: "engine",  gain: 0.10, rolloff: 2.0, evenMix: 0.5 },
+    ],
+    drive: 2.6, amDepth: 0.28, jitter: 9,
+    noiseGain: 0.16, noiseMult: 2.4, lowpass: 2400,
+  },
+  sport: {
+    label: "SPORT", cylFactor: 4, idleRPM: 950, maxRPM: 8200,
+    gears: [30, 58, 90, 128, 172, 235],
+    harmonics: [
+      { mult: 0.5, wave: "engine",  gain: 0.38, rolloff: 1.5, evenMix: 0.3 },
+      { mult: 1.0, wave: "engine",  gain: 0.45, rolloff: 1.1, evenMix: 0.8 },
+      { mult: 2.0, wave: "engine",  gain: 0.20, rolloff: 1.5, evenMix: 0.6 },
+      { mult: 3.0, wave: "engine",  gain: 0.08, rolloff: 2.0, evenMix: 1.0 },
+    ],
+    drive: 3.4, amDepth: 0.22, jitter: 11,
+    noiseGain: 0.13, noiseMult: 3.0, lowpass: 3800,
+  },
+  track: {
+    label: "TRACK", cylFactor: 6, idleRPM: 1300, maxRPM: 11500,
+    gears: [38, 68, 100, 138, 185, 250],
+    harmonics: [
+      { mult: 1.0, wave: "engine",  gain: 0.42, rolloff: 1.0, evenMix: 0.9 },
+      { mult: 2.0, wave: "engine",  gain: 0.26, rolloff: 1.3, evenMix: 0.7 },
+      { mult: 3.0, wave: "engine",  gain: 0.12, rolloff: 1.6, evenMix: 1.0 },
+      { mult: 0.5, wave: "sawtooth", gain: 0.16 },
+    ],
+    drive: 3.8, amDepth: 0.16, jitter: 13,
+    noiseGain: 0.11, noiseMult: 3.6, lowpass: 6200,
+  },
+  cyber: {
+    label: "CYBER", cylFactor: 2, idleRPM: 420, maxRPM: 9000,
+    gears: [270],
+    harmonics: [
+      { mult: 1.0, wave: "sine",     gain: 0.45 },
+      { mult: 2.0, wave: "sine",     gain: 0.26 },
+      { mult: 4.0, wave: "triangle", gain: 0.13 },
+      { mult: 6.02, wave: "sine",    gain: 0.07 },
+      { mult: 8.05, wave: "sine",    gain: 0.04 },
+    ],
+    drive: 1.2, amDepth: 0.06, jitter: 2,
+    noiseGain: 0.045, noiseMult: 6.0, lowpass: 7500,
+  },
+  s58: {
+    /* BMW S58 — inline-6 twin-turbo (M3/M4): smooth snarl + turbo whine */
+    label: "BMW S58", cylFactor: 3, idleRPM: 750, maxRPM: 7200,
+    gears: [28, 55, 88, 125, 168, 230],
+    harmonics: [
+      { mult: 0.5, wave: "engine", gain: 0.35, rolloff: 1.6, evenMix: 0.9 },
+      { mult: 1.0, wave: "engine", gain: 0.45, rolloff: 1.2, evenMix: 0.95 },
+      { mult: 2.0, wave: "engine", gain: 0.18, rolloff: 1.5, evenMix: 0.9 },
+      { mult: 3.0, wave: "sine",   gain: 0.06 },
+    ],
+    drive: 2.8, amDepth: 0.18, jitter: 7,
+    noiseGain: 0.14, noiseMult: 2.8, lowpass: 3200,
+    turbo: { gain: 0.06 },
+  },
+  p911: {
+    /* Porsche 911 — flat-6: raspy howl with boxer half-order rumble */
+    label: "PORSCHE 911", cylFactor: 3, idleRPM: 850, maxRPM: 8400,
+    gears: [30, 60, 95, 132, 175, 240],
+    harmonics: [
+      { mult: 0.5, wave: "engine",  gain: 0.30, rolloff: 1.4, evenMix: 0.35 },
+      { mult: 1.0, wave: "engine",  gain: 0.46, rolloff: 1.05, evenMix: 0.5 },
+      { mult: 1.5, wave: "engine",  gain: 0.16, rolloff: 1.5, evenMix: 0.8 },
+      { mult: 2.0, wave: "engine",  gain: 0.14, rolloff: 1.4, evenMix: 0.6 },
+      { mult: 3.0, wave: "sawtooth", gain: 0.05 },
+    ],
+    drive: 3.6, amDepth: 0.24, jitter: 10,
+    noiseGain: 0.15, noiseMult: 3.2, lowpass: 4200,
+  },
+  taycan: {
+    /* Porsche Taycan — Electric Sport Sound, real 2-speed gearbox */
+    label: "TAYCAN", cylFactor: 2, idleRPM: 380, maxRPM: 12000,
+    gears: [85, 270],
+    harmonics: [
+      { mult: 1.0,  wave: "sine",     gain: 0.42 },
+      { mult: 2.0,  wave: "sine",     gain: 0.24 },
+      { mult: 3.01, wave: "triangle", gain: 0.12 },
+      { mult: 5.02, wave: "sine",     gain: 0.07 },
+      { mult: 8.03, wave: "sine",     gain: 0.04 },
+      { mult: 13.05, wave: "sine",    gain: 0.025 },
+    ],
+    drive: 1.15, amDepth: 0.05, jitter: 1.5,
+    noiseGain: 0.04, noiseMult: 7.0, lowpass: 8000,
+  },
+  mario: {
+    /* Mario Kart — buzzy 2-stroke kart, square waves for the game feel */
+    label: "MARIO KART", cylFactor: 1, idleRPM: 1600, maxRPM: 13500,
+    gears: [35, 65, 100],
+    harmonics: [
+      { mult: 1.0, wave: "square",   gain: 0.40 },
+      { mult: 2.0, wave: "square",   gain: 0.22 },
+      { mult: 0.5, wave: "sawtooth", gain: 0.18 },
+      { mult: 3.0, wave: "square",   gain: 0.10 },
+      { mult: 4.0, wave: "triangle", gain: 0.08 },
+    ],
+    drive: 2.2, amDepth: 0.10, jitter: 22,
+    noiseGain: 0.10, noiseMult: 4.0, lowpass: 5200,
+  },
+  /* ---- real recordings, bundled in sounds.js (CC0 — archive.org/details/car-engines) ---- */
+  rHura: {
+    /* recording is a steady idle — loop the clean 0-3s stretch */
+    label: "HURACÁN V10", cylFactor: 5, idleRPM: 1000, maxRPM: 8500,
+    gears: [32, 62, 96, 135, 180, 245],
+    sample: true, sampleKey: "huracan", baseRpm: 2000, lowpass: 9000,
+    loopStart: 0.05, loopEnd: 3.0,
+  },
+  rAvent: {
+    /* steadiest rev stretch of the recording */
+    label: "AVENTADOR V12", cylFactor: 6, idleRPM: 1000, maxRPM: 8700,
+    gears: [34, 64, 98, 138, 185, 250],
+    sample: true, sampleKey: "aventador", baseRpm: 3500, lowpass: 9000,
+    loopStart: 14.8, loopEnd: 16.8,
+  },
+  rGt3: {
+    /* clip fades out after ~2s — loop the strong part only */
+    label: "911 GT3", cylFactor: 3, idleRPM: 900, maxRPM: 9000,
+    gears: [30, 60, 95, 132, 175, 240],
+    sample: true, sampleKey: "gt3", baseRpm: 3800, lowpass: 9000,
+    loopStart: 0.05, loopEnd: 1.85,
+  },
+  rBmwV10: {
+    label: "BMW M V10", cylFactor: 5, idleRPM: 800, maxRPM: 8250,
+    gears: [28, 55, 88, 125, 168, 230],
+    sample: true, sampleKey: "bmwV10", baseRpm: 3200, lowpass: 9000,
+  },
+  custom: {
+    label: "CUSTOM", cylFactor: 4, idleRPM: 850, maxRPM: 7000,
+    gears: [24, 48, 78, 112, 155, 215],
+    sample: true, lowpass: 9000,
+  },
+};
+
+/* ================================================================
+   Audio engine
+   ================================================================ */
+function makeEngineWave(ctx, rolloff, evenMix) {
+  const N = 24;
+  const real = new Float32Array(N + 1);
+  const imag = new Float32Array(N + 1);
+  for (let n = 1; n <= N; n++) {
+    imag[n] = (1 / Math.pow(n, rolloff)) * (n % 2 === 1 ? 1 : evenMix);
+  }
+  return ctx.createPeriodicWave(real, imag);
+}
+
+function distCurve(k) {
+  const n = 1024, c = new Float32Array(n);
+  const norm = Math.tanh(k);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    c[i] = Math.tanh(k * x) / norm;
+  }
+  return c;
+}
+
+class EngineAudio {
+  constructor() {
+    this.ctx = null;
+    this.nodes = null;
+    this.profileKey = "standard";
+    this.masterVol = 0.65;
+    this.muted = false;
+    this.running = false;
+    this.customBuffer = null;
+    this.customBaseRpm = 2500;
+    this.jitterTimer = null;
+    this.analyser = null;
+  }
+
+  get profile() { return PROFILES[this.profileKey]; }
+
+  start() {
+    if (this.running) return;
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = this.ctx;
+    const p = this.profile;
+
+    const master = ctx.createGain();
+    master.gain.value = 0;
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.75;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -18;
+    comp.ratio.value = 6;
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = "lowpass";
+    lowpass.frequency.value = p.lowpass;
+    lowpass.Q.value = 0.8;
+
+    lowpass.connect(comp).connect(master).connect(analyser).connect(ctx.destination);
+    this.analyser = analyser;
+
+    const sampleBuf = p.sample
+      ? (p.sampleKey ? (window.REAL_BUFFERS || {})[p.sampleKey] : this.customBuffer)
+      : null;
+    if (sampleBuf) {
+      /* ---- sample mode (uploaded file or bundled real recording) ---- */
+      const src = ctx.createBufferSource();
+      src.buffer = sampleBuf;
+      src.loop = true;
+      if (p.loopStart != null) src.loopStart = p.loopStart;
+      if (p.loopEnd != null) src.loopEnd = p.loopEnd;
+      const g = ctx.createGain();
+      g.gain.value = 0.9;
+      src.connect(g).connect(lowpass);
+      src.start(0, p.loopStart || 0);
+      this.nodes = { master, lowpass, sample: src };
+    } else {
+      /* ---- synth mode ---- */
+      const oscSum = ctx.createGain();
+      oscSum.gain.value = 1;
+      const oscs = p.harmonics.map(h => {
+        const osc = ctx.createOscillator();
+        if (h.wave === "engine") osc.setPeriodicWave(makeEngineWave(ctx, h.rolloff, h.evenMix));
+        else osc.type = h.wave;
+        osc.frequency.value = 50;
+        const g = ctx.createGain();
+        g.gain.value = h.gain;
+        osc.connect(g).connect(oscSum);
+        osc.start();
+        return { osc, mult: h.mult };
+      });
+
+      const shaper = ctx.createWaveShaper();
+      shaper.curve = distCurve(p.drive);
+      shaper.oversample = "2x";
+
+      // rev-rate amplitude "lope" — the throb of a real engine
+      const amGain = ctx.createGain();
+      amGain.gain.value = 1 - p.amDepth;
+      const lfo = ctx.createOscillator();
+      lfo.type = "sine";
+      lfo.frequency.value = 13;
+      const lfoDepth = ctx.createGain();
+      lfoDepth.gain.value = p.amDepth;
+      lfo.connect(lfoDepth).connect(amGain.gain);
+      lfo.start();
+
+      oscSum.connect(shaper).connect(amGain).connect(lowpass);
+
+      // intake / exhaust noise
+      const noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const noise = ctx.createBufferSource();
+      noise.buffer = noiseBuf;
+      noise.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.Q.value = 1.1;
+      const ng = ctx.createGain();
+      ng.gain.value = p.noiseGain;
+      noise.connect(bp).connect(ng).connect(lowpass);
+      noise.start();
+
+      // turbocharger whine — bypasses the lowpass so it stays crisp
+      let turbo = null;
+      if (p.turbo) {
+        const tOsc = ctx.createOscillator();
+        tOsc.type = "sine";
+        tOsc.frequency.value = 2000;
+        const tG = ctx.createGain();
+        tG.gain.value = 0;
+        tOsc.connect(tG).connect(comp);
+        tOsc.start();
+        turbo = { osc: tOsc, g: tG };
+      }
+
+      this.nodes = { master, lowpass, oscs, lfo, bp, turbo };
+
+      // slight random detune — real engines never spin perfectly
+      this.jitterTimer = setInterval(() => {
+        if (!this.running || !this.nodes.oscs) return;
+        const t = this.ctx.currentTime;
+        for (const o of this.nodes.oscs) {
+          o.osc.detune.setTargetAtTime((Math.random() - 0.5) * 2 * p.jitter, t, 0.06);
+        }
+      }, 90);
+    }
+
+    this.running = true;
+  }
+
+  stop() {
+    if (!this.running) return;
+    clearInterval(this.jitterTimer);
+    this.jitterTimer = null;
+    const ctx = this.ctx;
+    this.nodes.master.gain.setTargetAtTime(0, ctx.currentTime, 0.08);
+    setTimeout(() => ctx.close().catch(() => {}), 350);
+    this.running = false;
+    this.nodes = null;
+    this.ctx = null;
+    this.analyser = null;
+  }
+
+  setProfile(key) {
+    this.profileKey = key;
+    if (this.running) {
+      this.stop();
+      setTimeout(() => this.start(), 380);
+    }
+  }
+
+  setVolume(v) { this.masterVol = v; }
+  setMuted(m) { this.muted = m; }
+
+  update(rpm, load) {
+    if (!this.running || !this.nodes) return;
+    const t = this.ctx.currentTime;
+    const p = this.profile;
+
+    const vol = this.muted ? 0 : this.masterVol * 0.5 * (0.35 + 0.65 * load);
+    this.nodes.master.gain.setTargetAtTime(vol, t, 0.1);
+    this.nodes.lowpass.frequency.setTargetAtTime(
+      p.lowpass * (0.55 + 0.9 * load), t, 0.15);
+
+    if (this.nodes.sample) {
+      const baseRpm = p.baseRpm || this.customBaseRpm;
+      const rate = Math.min(Math.max(rpm / baseRpm, 0.35), 3.5);
+      this.nodes.sample.playbackRate.setTargetAtTime(rate, t, 0.08);
+    } else {
+      const firing = (rpm / 60) * p.cylFactor;
+      for (const o of this.nodes.oscs) {
+        o.osc.frequency.setTargetAtTime(firing * o.mult, t, 0.05);
+      }
+      this.nodes.lfo.frequency.setTargetAtTime(rpm / 60, t, 0.1);
+      this.nodes.bp.frequency.setTargetAtTime(
+        Math.min(firing * p.noiseMult, 9000), t, 0.06);
+      if (this.nodes.turbo) {
+        // whine pitch follows rpm, volume spools up with load (slight lag)
+        this.nodes.turbo.osc.frequency.setTargetAtTime(
+          Math.min(1200 + rpm * 0.85, 9500), t, 0.15);
+        this.nodes.turbo.g.gain.setTargetAtTime(load * p.turbo.gain, t, 0.25);
+      }
+    }
+  }
+}
+
+/* ================================================================
+   Speed → RPM (virtual gearbox)
+   ================================================================ */
+function speedToRpmGear(speedKmh, p) {
+  const { gears, idleRPM, maxRPM } = p;
+  if (speedKmh < 1) return { rpm: idleRPM, gear: "N" };
+  let lo = 0;
+  for (let i = 0; i < gears.length; i++) {
+    const hi = gears[i];
+    if (speedKmh <= hi || i === gears.length - 1) {
+      const frac = Math.min(Math.max((speedKmh - lo) / (hi - lo), 0), 1);
+      const startRPM = i === 0 ? idleRPM : idleRPM + (maxRPM - idleRPM) * 0.35;
+      return { rpm: startRPM + (maxRPM - startRPM) * frac, gear: String(i + 1) };
+    }
+    lo = hi;
+  }
+}
+
+/* ================================================================
+   GPS speed source
+   ================================================================ */
+class GpsSpeed {
+  constructor(onUpdate, onStatus) {
+    this.onUpdate = onUpdate;
+    this.onStatus = onStatus;
+    this.watchId = null;
+    this.prev = null;
+  }
+  start() {
+    if (!("geolocation" in navigator)) {
+      this.onStatus("err", "เบราว์เซอร์นี้ไม่รองรับ Geolocation");
+      return;
+    }
+    this.onStatus("wait", "กำลังขอสัญญาณ GPS…");
+    this.watchId = navigator.geolocation.watchPosition(
+      pos => this.handle(pos),
+      err => {
+        const msgs = {
+          1: "ถูกปฏิเสธสิทธิ์ตำแหน่ง — ต้องอนุญาต และหน้าเว็บต้องเป็น HTTPS",
+          2: "หาตำแหน่ง GPS ไม่ได้",
+          3: "GPS หมดเวลารอ กำลังลองใหม่…",
+        };
+        this.onStatus("err", msgs[err.code] || err.message);
+      },
+      { enableHighAccuracy: true, maximumAge: 500, timeout: 10000 }
+    );
+  }
+  stop() {
+    if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+    this.watchId = null;
+    this.prev = null;
+  }
+  handle(pos) {
+    const c = pos.coords;
+    let kmh = null;
+    if (c.speed !== null && !isNaN(c.speed)) {
+      kmh = c.speed * 3.6;
+    } else if (this.prev) {
+      const dt = (pos.timestamp - this.prev.time) / 1000;
+      if (dt > 0.2) {
+        kmh = (haversine(this.prev.lat, this.prev.lon, c.latitude, c.longitude) / dt) * 3.6;
+      }
+    }
+    this.prev = { lat: c.latitude, lon: c.longitude, time: pos.timestamp };
+    if (kmh !== null && kmh < 400) {
+      this.onStatus("live", "GPS LIVE • ±" + Math.round(c.accuracy) + " ม.");
+      this.onUpdate(kmh);
+    }
+  }
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000, toRad = x => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/* ================================================================
+   App state + main loop
+   ================================================================ */
+const $ = id => document.getElementById(id);
+const engine = new EngineAudio();
+
+/* ---- decode bundled real-car recordings (sounds.js) ---- */
+window.REAL_BUFFERS = {};
+if (window.REAL_SOUNDS) {
+  const dctx = new OfflineAudioContext(1, 1, 44100);
+  const jobs = Object.entries(REAL_SOUNDS).map(([key, b64]) => {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return dctx.decodeAudioData(bytes.buffer).then(buf => { REAL_BUFFERS[key] = buf; });
+  });
+  Promise.allSettled(jobs).then(() => {
+    document.querySelectorAll("#profiles button.real").forEach(b => {
+      if (REAL_BUFFERS[PROFILES[b.dataset.p].sampleKey]) b.disabled = false;
+    });
+  });
+}
+
+let targetSpeed = 0, smoothSpeed = 0, lastSmooth = 0;
+let accelSmooth = 0, motorTemp = 32;
+let started = false, demoMode = false, rafId = null;
+
+const gps = new GpsSpeed(
+  s => { if (!demoMode) targetSpeed = s; },
+  (state, msg) => {
+    const b = $("gpsBadge");
+    b.className = "badge " + (state === "live" ? "live" : state === "err" ? "err" : "");
+    $("gpsBadgeText").textContent =
+      state === "live" ? "GPS LIVE" : state === "err" ? "GPS ERROR" : "GPS…";
+    $("statusText").textContent = msg;
+  }
+);
+
+/* ---- canvases ---- */
+const waveCv = $("wave"), eqCv = $("eq");
+function fitCanvas(cv) {
+  const r = cv.getBoundingClientRect();
+  cv.width = Math.max(r.width, 100) * (window.devicePixelRatio || 1);
+  cv.height = Math.max(r.height, 40) * (window.devicePixelRatio || 1);
+}
+window.addEventListener("resize", () => { fitCanvas(waveCv); fitCanvas(eqCv); });
+setTimeout(() => { fitCanvas(waveCv); fitCanvas(eqCv); }, 50);
+
+const waveData = new Uint8Array(2048);
+const freqData = new Uint8Array(1024);
+
+function drawWave() {
+  const ctx2 = waveCv.getContext("2d");
+  const w = waveCv.width, h = waveCv.height;
+  ctx2.clearRect(0, 0, w, h);
+  ctx2.strokeStyle = "#35d6ff";
+  ctx2.lineWidth = 2 * (window.devicePixelRatio || 1);
+  ctx2.shadowColor = "rgba(53,214,255,0.6)";
+  ctx2.shadowBlur = 8;
+  ctx2.beginPath();
+  if (engine.analyser) {
+    engine.analyser.getByteTimeDomainData(waveData);
+    const n = engine.analyser.fftSize;
+    for (let i = 0; i < n; i++) {
+      const x = (i / n) * w;
+      const y = (waveData[i] / 255) * h;
+      i === 0 ? ctx2.moveTo(x, y) : ctx2.lineTo(x, y);
+    }
+  } else {
+    ctx2.moveTo(0, h / 2);
+    ctx2.lineTo(w, h / 2);
+  }
+  ctx2.stroke();
+}
+
+function drawEq() {
+  const ctx2 = eqCv.getContext("2d");
+  const w = eqCv.width, h = eqCv.height;
+  ctx2.clearRect(0, 0, w, h);
+  const bars = 40, gap = w * 0.004;
+  const bw = w / bars - gap;
+  for (let i = 0; i < bars; i++) {
+    let v = 0.03;
+    if (engine.analyser) {
+      engine.analyser.getByteFrequencyData(freqData);
+      // log-ish bin mapping so low freqs don't hog every bar
+      const idx = Math.floor(Math.pow(i / bars, 1.7) * 380);
+      v = Math.max(freqData[idx] / 255, 0.03);
+    }
+    const bh = v * h;
+    ctx2.fillStyle = v > 0.75 ? "#a5f3fc" : "#35d6ff";
+    ctx2.globalAlpha = 0.35 + v * 0.65;
+    ctx2.fillRect(i * (bw + gap), h - bh, bw, bh);
+  }
+  ctx2.globalAlpha = 1;
+}
+
+/* ---- main loop ---- */
+const ARC_LEN = 527.8 * 0.75;   // 270° of the gauge circle
+function loop() {
+  smoothSpeed += (targetSpeed - smoothSpeed) * 0.06;
+
+  const accel = (smoothSpeed - lastSmooth) * 60;      // km/h per second
+  lastSmooth = smoothSpeed;
+  accelSmooth += (accel - accelSmooth) * 0.08;
+  const load = Math.min(Math.max(accelSmooth / 8, 0), 1);
+  const loadDisp = Math.min(load * 0.8 + (smoothSpeed / 250) * 0.35, 1);
+
+  const tempTarget = 34 + loadDisp * 55;
+  motorTemp += (tempTarget - motorTemp) * 0.0012;
+
+  const { rpm, gear } = speedToRpmGear(smoothSpeed, engine.profile);
+  engine.update(rpm, load);
+
+  /* gauge */
+  $("speedVal").textContent = Math.round(smoothSpeed);
+  const frac = Math.min(smoothSpeed / 200, 1);
+  $("speedArc").setAttribute("stroke-dasharray", (frac * ARC_LEN) + " 527.8");
+  $("speedArc").style.opacity = frac > 0.005 ? "1" : "0";
+  $("rpmVal").textContent = Math.round(rpm / 10) * 10;
+  $("gearVal").textContent = gear;
+  $("rpmBar").style.width = Math.min(rpm / engine.profile.maxRPM * 100, 100) + "%";
+
+  /* telemetry */
+  $("loadBar").style.width = (loadDisp * 100) + "%";
+  $("loadVal").innerHTML = Math.round(loadDisp * 100) + "<small> %</small>";
+  $("accBar").style.width = Math.min(Math.abs(accelSmooth) / 12 * 100, 100) + "%";
+  $("accVal").innerHTML = (accelSmooth >= 0 ? "+" : "") + accelSmooth.toFixed(2) + "<small> km/h/s</small>";
+  $("tempBar").style.width = Math.min((motorTemp - 30) / 60 * 100, 100) + "%";
+  $("tempVal").innerHTML = Math.round(motorTemp) + "<small> °C</small>";
+  const out = engine.running && !engine.muted ? Math.round(engine.masterVol * (35 + 65 * load)) : 0;
+  $("outBar").style.width = out + "%";
+  $("outVal").innerHTML = out + "<small> %</small>";
+
+  drawWave();
+  drawEq();
+  rafId = requestAnimationFrame(loop);
+}
+loop();   // visuals run even before the engine starts
+
+/* ================================================================
+   UI wiring
+   ================================================================ */
+$("startBtn").addEventListener("click", () => {
+  if (!started) {
+    engine.start();
+    if (!demoMode) gps.start();
+    started = true;
+    $("startBtn").textContent = "■ STOP";
+    $("startBtn").classList.add("on");
+    if (demoMode) $("statusText").textContent = "โหมดทดสอบ — เลื่อน slider จำลองความเร็ว";
+  } else {
+    engine.stop();
+    gps.stop();
+    started = false;
+    targetSpeed = 0;
+    $("startBtn").textContent = "▶ START";
+    $("startBtn").classList.remove("on");
+    $("statusText").textContent = "หยุดทำงานแล้ว";
+    $("gpsBadge").className = "badge";
+    $("gpsBadgeText").textContent = "GPS OFF";
+  }
+});
+
+$("muteBtn").addEventListener("click", () => {
+  engine.setMuted(!engine.muted);
+  $("muteBtn").classList.toggle("on", engine.muted);
+  $("muteBtn").textContent = engine.muted ? "UNMUTE" : "MUTE";
+});
+
+$("volume").addEventListener("input", e => engine.setVolume(e.target.value / 100));
+
+$("profiles").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn || btn.disabled) return;
+  document.querySelectorAll("#profiles button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  engine.setProfile(btn.dataset.p);
+  $("tuneBox").classList.toggle("show", btn.dataset.p === "custom");
+});
+
+$("fileInput").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $("statusText").textContent = "กำลังโหลดไฟล์เสียง…";
+  try {
+    const buf = await file.arrayBuffer();
+    const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+    engine.customBuffer = await decodeCtx.decodeAudioData(buf);
+    decodeCtx.close().catch(() => {});
+    $("customBtn").disabled = false;
+    $("statusText").textContent =
+      "โหลด \"" + file.name + "\" สำเร็จ (" + engine.customBuffer.duration.toFixed(1) +
+      " วิ) — กดปุ่ม CUSTOM เพื่อใช้เสียงนี้ *ควรเป็นไฟล์เสียงเครื่องยนต์รอบคงที่แบบวนลูป";
+    document.querySelectorAll("#profiles button").forEach(b => b.classList.remove("active"));
+    $("customBtn").classList.add("active");
+    engine.setProfile("custom");
+    $("tuneBox").classList.add("show");
+  } catch (err) {
+    $("statusText").textContent = "อ่านไฟล์เสียงไม่สำเร็จ: " + err.message;
+  }
+});
+
+$("baseRpm").addEventListener("input", e => {
+  engine.customBaseRpm = Number(e.target.value);
+  $("baseRpmVal").textContent = e.target.value;
+});
+
+$("demoChk").addEventListener("change", e => {
+  demoMode = e.target.checked;
+  $("demoBox").classList.toggle("show", demoMode);
+  if (demoMode) {
+    gps.stop();
+    targetSpeed = Number($("demoSpeed").value);
+    $("statusText").textContent = "โหมดทดสอบ — เลื่อน slider จำลองความเร็ว";
+    $("gpsBadge").className = "badge live";
+    $("gpsBadgeText").textContent = "DEMO";
+  } else {
+    targetSpeed = 0;
+    $("gpsBadge").className = "badge";
+    $("gpsBadgeText").textContent = "GPS OFF";
+    if (started) gps.start();
+  }
+});
+
+$("demoSpeed").addEventListener("input", e => {
+  $("demoVal").textContent = e.target.value;
+  if (demoMode) targetSpeed = Number(e.target.value);
+});
+</script>
+</body>
+</html>
