@@ -246,14 +246,10 @@
     <button data-p="sport">SPORT</button>
     <button data-p="track">TRACK</button>
     <button data-p="cyber">CYBER</button>
-    <button data-p="s58">BMW S58</button>
-    <button data-p="p911">PORSCHE 911</button>
-    <button data-p="taycan">TAYCAN</button>
     <button data-p="mario">MARIO KART</button>
     <button data-p="rHura" class="real" disabled>HURACÁN V10</button>
     <button data-p="rAvent" class="real" disabled>AVENTADOR V12</button>
     <button data-p="rGt3" class="real" disabled>911 GT3</button>
-    <button data-p="rBmwV10" class="real" disabled>BMW M V10</button>
     <button data-p="custom" id="customBtn" disabled>CUSTOM</button>
   </div>
 
@@ -355,62 +351,21 @@ const PROFILES = {
     drive: 1.2, amDepth: 0.06, jitter: 2,
     noiseGain: 0.045, noiseMult: 6.0, lowpass: 7500,
   },
-  s58: {
-    /* BMW S58 — inline-6 twin-turbo (M3/M4): smooth snarl + turbo whine */
-    label: "BMW S58", cylFactor: 3, idleRPM: 750, maxRPM: 7200,
-    gears: [28, 55, 88, 125, 168, 230],
-    harmonics: [
-      { mult: 0.5, wave: "engine", gain: 0.35, rolloff: 1.6, evenMix: 0.9 },
-      { mult: 1.0, wave: "engine", gain: 0.45, rolloff: 1.2, evenMix: 0.95 },
-      { mult: 2.0, wave: "engine", gain: 0.18, rolloff: 1.5, evenMix: 0.9 },
-      { mult: 3.0, wave: "sine",   gain: 0.06 },
-    ],
-    drive: 2.8, amDepth: 0.18, jitter: 7,
-    noiseGain: 0.14, noiseMult: 2.8, lowpass: 3200,
-    turbo: { gain: 0.06 },
-  },
-  p911: {
-    /* Porsche 911 — flat-6: raspy howl with boxer half-order rumble */
-    label: "PORSCHE 911", cylFactor: 3, idleRPM: 850, maxRPM: 8400,
-    gears: [30, 60, 95, 132, 175, 240],
-    harmonics: [
-      { mult: 0.5, wave: "engine",  gain: 0.30, rolloff: 1.4, evenMix: 0.35 },
-      { mult: 1.0, wave: "engine",  gain: 0.46, rolloff: 1.05, evenMix: 0.5 },
-      { mult: 1.5, wave: "engine",  gain: 0.16, rolloff: 1.5, evenMix: 0.8 },
-      { mult: 2.0, wave: "engine",  gain: 0.14, rolloff: 1.4, evenMix: 0.6 },
-      { mult: 3.0, wave: "sawtooth", gain: 0.05 },
-    ],
-    drive: 3.6, amDepth: 0.24, jitter: 10,
-    noiseGain: 0.15, noiseMult: 3.2, lowpass: 4200,
-  },
-  taycan: {
-    /* Porsche Taycan — Electric Sport Sound, real 2-speed gearbox */
-    label: "TAYCAN", cylFactor: 2, idleRPM: 380, maxRPM: 12000,
-    gears: [85, 270],
-    harmonics: [
-      { mult: 1.0,  wave: "sine",     gain: 0.42 },
-      { mult: 2.0,  wave: "sine",     gain: 0.24 },
-      { mult: 3.01, wave: "triangle", gain: 0.12 },
-      { mult: 5.02, wave: "sine",     gain: 0.07 },
-      { mult: 8.03, wave: "sine",     gain: 0.04 },
-      { mult: 13.05, wave: "sine",    gain: 0.025 },
-    ],
-    drive: 1.15, amDepth: 0.05, jitter: 1.5,
-    noiseGain: 0.04, noiseMult: 7.0, lowpass: 8000,
-  },
   mario: {
-    /* Mario Kart — buzzy 2-stroke kart, square waves for the game feel */
-    label: "MARIO KART", cylFactor: 1, idleRPM: 1600, maxRPM: 13500,
-    gears: [35, 65, 100],
+    /* Mario Kart 8 (Switch) — bright buzzy kart: smooth continuous pitch
+       rise, nasal sawtooth body + high electric whine, almost no noise */
+    label: "MARIO KART", cylFactor: 1.15, idleRPM: 2200, maxRPM: 14000,
+    gears: [70, 150],        // few + wide → near-continuous rev like the game
     harmonics: [
-      { mult: 1.0, wave: "square",   gain: 0.40 },
-      { mult: 2.0, wave: "square",   gain: 0.22 },
-      { mult: 0.5, wave: "sawtooth", gain: 0.18 },
-      { mult: 3.0, wave: "square",   gain: 0.10 },
-      { mult: 4.0, wave: "triangle", gain: 0.08 },
+      { mult: 1.0, wave: "sawtooth", gain: 0.36 },   // buzzy body
+      { mult: 2.0, wave: "square",   gain: 0.20 },   // nasal formant
+      { mult: 3.0, wave: "sawtooth", gain: 0.12 },
+      { mult: 4.0, wave: "square",   gain: 0.06 },
+      { mult: 6.0, wave: "triangle", gain: 0.045 },  // top shimmer
     ],
-    drive: 2.2, amDepth: 0.10, jitter: 22,
-    noiseGain: 0.10, noiseMult: 4.0, lowpass: 5200,
+    drive: 1.7, amDepth: 0.05, jitter: 3,
+    noiseGain: 0.025, noiseMult: 5.5, lowpass: 6800,
+    turbo: { gain: 0.05 },   // rising electric whir on top
   },
   /* ---- real recordings, bundled in sounds.js (CC0 — archive.org/details/car-engines) ---- */
   rHura: {
@@ -419,6 +374,7 @@ const PROFILES = {
     gears: [32, 62, 96, 135, 180, 245],
     sample: true, sampleKey: "huracan", baseRpm: 2000, lowpass: 9000,
     loopStart: 0.05, loopEnd: 3.0,
+    bass: 6, sub: 0.12, boost: 1.55, scream: 7, rasp: 4.5, raspGain: 0.30, synth: 0.22, makeup: 2.2,
   },
   rAvent: {
     /* steadiest rev stretch of the recording */
@@ -426,6 +382,7 @@ const PROFILES = {
     gears: [34, 64, 98, 138, 185, 250],
     sample: true, sampleKey: "aventador", baseRpm: 3500, lowpass: 9000,
     loopStart: 14.8, loopEnd: 16.8,
+    bass: 8, sub: 0.14, boost: 1.55, scream: 6, rasp: 4, raspGain: 0.28, synth: 0.24, makeup: 2.2,
   },
   rGt3: {
     /* clip fades out after ~2s — loop the strong part only */
@@ -433,16 +390,15 @@ const PROFILES = {
     gears: [30, 60, 95, 132, 175, 240],
     sample: true, sampleKey: "gt3", baseRpm: 3800, lowpass: 9000,
     loopStart: 0.05, loopEnd: 1.85,
-  },
-  rBmwV10: {
-    label: "BMW M V10", cylFactor: 5, idleRPM: 800, maxRPM: 8250,
-    gears: [28, 55, 88, 125, 168, 230],
-    sample: true, sampleKey: "bmwV10", baseRpm: 3200, lowpass: 9000,
+    bass: 7, sub: 0.12, boost: 1.5, scream: 7, rasp: 5, raspGain: 0.32, synth: 0.20, makeup: 2.2,
   },
   custom: {
     label: "CUSTOM", cylFactor: 4, idleRPM: 850, maxRPM: 7000,
     gears: [24, 48, 78, 112, 155, 215],
     sample: true, lowpass: 9000,
+    // loopStart/loopEnd + baseRpm are filled in by auto-tune on upload;
+    // moderate enhancement so uploads get the same body/rasp as the real cars
+    bass: 5, sub: 0.10, scream: 4, rasp: 3.5, raspGain: 0.22, synth: 0.16, makeup: 1.8,
   },
 };
 
@@ -467,6 +423,79 @@ function distCurve(k) {
     c[i] = Math.tanh(k * x) / norm;
   }
   return c;
+}
+
+/* ================================================================
+   Auto-tune an uploaded engine loop:
+   • finds the steadiest loud stretch and snaps loop points to zero
+     crossings (kills clicks / transients)
+   • detects the firing fundamental via autocorrelation → reference RPM
+   Returns values fed straight into the CUSTOM profile.
+   ================================================================ */
+function autoTune(buf, cylFactor = 4) {
+  const sr = buf.sampleRate;
+  const d = buf.getChannelData(0);
+  const N = d.length, dur = N / sr;
+
+  // ---- short-time RMS envelope (30 ms hops) ----
+  const hop = Math.max(1, Math.floor(sr * 0.03));
+  const env = [];
+  for (let i = 0; i + hop <= N; i += hop) {
+    let e = 0;
+    for (let j = i; j < i + hop; j++) e += d[j] * d[j];
+    env.push(Math.sqrt(e / hop));
+  }
+  let maxEnv = 1e-6;
+  for (const v of env) if (v > maxEnv) maxEnv = v;
+
+  // ---- steadiest loud region of ~target length (lowest RMS variation) ----
+  const target = Math.min(2.0, Math.max(0.5, dur - 0.3));   // seconds
+  const winHops = Math.max(3, Math.round(target / (hop / sr)));
+  let best = { cv: Infinity, start: 0 };
+  for (let s = 0; s + winHops <= env.length; s++) {
+    let mean = 0;
+    for (let k = s; k < s + winHops; k++) mean += env[k];
+    mean /= winHops;
+    if (mean < 0.25 * maxEnv) continue;                     // skip quiet parts
+    let varr = 0;
+    for (let k = s; k < s + winHops; k++) { const x = env[k] - mean; varr += x * x; }
+    const cv = Math.sqrt(varr / winHops) / mean;            // coeff. of variation
+    if (cv < best.cv) best = { cv, start: s };
+  }
+  let loopStart = best.start * hop / sr;
+  let loopEnd = Math.min(dur, loopStart + target);
+
+  // ---- firing fundamental via autocorrelation on the region ----
+  const a = Math.floor(loopStart * sr);
+  const b = Math.min(N, Math.floor((loopStart + Math.min(0.5, loopEnd - loopStart)) * sr));
+  const minHz = 30, maxHz = 220;
+  const minLag = Math.floor(sr / maxHz), maxLag = Math.floor(sr / minHz);
+  let bestLag = minLag, bestC = -Infinity;
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let c = 0;
+    for (let i = a; i + lag < b; i += 2) c += d[i] * d[i + lag];
+    if (c > bestC) { bestC = c; bestLag = lag; }
+  }
+  const fundamentalHz = sr / bestLag;
+
+  // ---- snap loop points to upward zero crossings ----
+  const snap = (tsec, dir) => {
+    let i = Math.floor(tsec * sr);
+    for (let n = 0; n < sr * 0.05; n++, i += dir) {
+      if (i > 0 && i < N && d[i - 1] < 0 && d[i] >= 0) return i / sr;
+    }
+    return tsec;
+  };
+  loopStart = snap(loopStart, 1);
+  loopEnd = snap(loopEnd, -1);
+  if (loopEnd - loopStart < 0.3) { loopStart = 0; loopEnd = dur; }   // fallback
+
+  // ---- reference RPM from the fundamental (same firing model as synth) ----
+  // rounded to 100 to line up with the baseRpm slider's step
+  let baseRpm = Math.round(fundamentalHz * 60 / cylFactor / 100) * 100;
+  baseRpm = Math.min(5000, Math.max(1000, baseRpm));
+
+  return { baseRpm, loopStart, loopEnd, fundamentalHz };
 }
 
 class EngineAudio {
@@ -517,11 +546,95 @@ class EngineAudio {
       src.loop = true;
       if (p.loopStart != null) src.loopStart = p.loopStart;
       if (p.loopEnd != null) src.loopEnd = p.loopEnd;
+
+      // low-shelf warmth — thickens the recording's low end (ทุ้ม)
+      const shelf = ctx.createBiquadFilter();
+      shelf.type = "lowshelf";
+      shelf.frequency.value = 190;
+      shelf.gain.value = p.bass != null ? p.bass : 6;
+
+      // high-shelf scream — lifts the top end for the raspy wail (แผด)
+      const hi = ctx.createBiquadFilter();
+      hi.type = "highshelf";
+      hi.frequency.value = 3000;
+      hi.gain.value = p.scream != null ? p.scream : 0;
+
+      // evener — tames the recording's natural idle throb so it doesn't
+      // wobble/สั่น, and glues the loop seam
+      const evener = ctx.createDynamicsCompressor();
+      evener.threshold.value = -32;
+      evener.ratio.value = 10;
+      evener.attack.value = 0.003;
+      evener.release.value = 0.25;
+
       const g = ctx.createGain();
-      g.gain.value = 0.9;
-      src.connect(g).connect(lowpass);
+      g.gain.value = 0.9 * (p.boost || 1);
+      src.connect(shelf).connect(hi).connect(evener).connect(g).connect(lowpass);
       src.start(0, p.loopStart || 0);
-      this.nodes = { master, lowpass, sample: src };
+
+      // parallel rasp — drive a top band hard for the aggressive metallic
+      // scream that swells in under throttle
+      let rasp = null;
+      if (p.raspGain) {
+        const raspShaper = ctx.createWaveShaper();
+        raspShaper.curve = distCurve(p.rasp != null ? p.rasp : 4);
+        raspShaper.oversample = "2x";
+        const raspBP = ctx.createBiquadFilter();
+        raspBP.type = "bandpass";
+        raspBP.frequency.value = 3400;
+        raspBP.Q.value = 0.8;
+        const raspG = ctx.createGain();
+        raspG.gain.value = 0;
+        // post-compressor so the throttle swell stays dynamic and cuts (แผด)
+        g.connect(raspShaper).connect(raspBP).connect(raspG).connect(master);
+        rasp = raspG;
+      }
+
+      // sub-octave body oscillator locked to the engine's firing order —
+      // adds the deep chest-punch of a real active-sound system (แน่น)
+      const subOsc = ctx.createOscillator();
+      subOsc.type = "sine";
+      subOsc.frequency.value = 40;
+      const subLp = ctx.createBiquadFilter();
+      subLp.type = "lowpass";
+      subLp.frequency.value = 170;
+      const subG = ctx.createGain();
+      subG.gain.value = 0;
+      subOsc.connect(subLp).connect(subG).connect(master);
+      subOsc.start();
+
+      // simulated harmonic engine locked to the firing order — layered under
+      // the recording to fill in every tone across the rev range (จำลอง)
+      let synth = null;
+      if (p.synth) {
+        const synthSum = ctx.createGain();
+        synthSum.gain.value = 1;
+        const sOscs = [
+          { mult: 1.0, wave: "engine",  gain: 0.50, rolloff: 1.1, evenMix: 0.6 },
+          { mult: 2.0, wave: "engine",  gain: 0.30, rolloff: 1.3, evenMix: 0.8 },
+          { mult: 3.0, wave: "sawtooth", gain: 0.16 },
+          { mult: 4.0, wave: "sawtooth", gain: 0.09 },
+        ].map(h => {
+          const osc = ctx.createOscillator();
+          if (h.wave === "engine") osc.setPeriodicWave(makeEngineWave(ctx, h.rolloff, h.evenMix));
+          else osc.type = h.wave;
+          osc.frequency.value = 80;
+          const og = ctx.createGain();
+          og.gain.value = h.gain;
+          osc.connect(og).connect(synthSum);
+          osc.start();
+          return { osc, mult: h.mult };
+        });
+        const synthShaper = ctx.createWaveShaper();
+        synthShaper.curve = distCurve(2.4);
+        synthShaper.oversample = "2x";
+        const synthGain = ctx.createGain();
+        synthGain.gain.value = 0;
+        synthSum.connect(synthShaper).connect(synthGain).connect(lowpass);
+        synth = { oscs: sOscs, g: synthGain };
+      }
+
+      this.nodes = { master, lowpass, sample: src, sub: { osc: subOsc, g: subG }, rasp, synth };
     } else {
       /* ---- synth mode ---- */
       const oscSum = ctx.createGain();
@@ -627,7 +740,8 @@ class EngineAudio {
     const t = this.ctx.currentTime;
     const p = this.profile;
 
-    const vol = this.muted ? 0 : this.masterVol * 0.5 * (0.35 + 0.65 * load);
+    const makeup = this.nodes.sample ? (p.makeup || 1) : 1;
+    const vol = this.muted ? 0 : this.masterVol * 0.5 * (0.35 + 0.65 * load) * makeup;
     this.nodes.master.gain.setTargetAtTime(vol, t, 0.1);
     this.nodes.lowpass.frequency.setTargetAtTime(
       p.lowpass * (0.55 + 0.9 * load), t, 0.15);
@@ -636,6 +750,25 @@ class EngineAudio {
       const baseRpm = p.baseRpm || this.customBaseRpm;
       const rate = Math.min(Math.max(rpm / baseRpm, 0.35), 3.5);
       this.nodes.sample.playbackRate.setTargetAtTime(rate, t, 0.08);
+      const firing = (rpm / 60) * (p.cylFactor || 4);
+      if (this.nodes.sub) {
+        // half-order sub-octave rumble tracking the firing frequency
+        const subHz = Math.min(Math.max(firing * 0.5, 25), 130);
+        this.nodes.sub.osc.frequency.setTargetAtTime(subHz, t, 0.08);
+        const subLevel = p.sub != null ? p.sub : 0.28;
+        this.nodes.sub.g.gain.setTargetAtTime(subLevel * (0.5 + 0.5 * load), t, 0.12);
+      }
+      if (this.nodes.rasp) {
+        // rasp screams in with throttle, tails off when cruising
+        this.nodes.rasp.gain.setTargetAtTime((p.raspGain || 0) * (0.2 + 0.8 * load), t, 0.1);
+      }
+      if (this.nodes.synth) {
+        // simulated harmonics track the firing order across the whole range
+        for (const o of this.nodes.synth.oscs) {
+          o.osc.frequency.setTargetAtTime(Math.min(firing * o.mult, 9000), t, 0.05);
+        }
+        this.nodes.synth.g.gain.setTargetAtTime((p.synth || 0) * (0.4 + 0.6 * load), t, 0.1);
+      }
     } else {
       const firing = (rpm / 60) * p.cylFactor;
       for (const o of this.nodes.oscs) {
@@ -924,9 +1057,21 @@ $("fileInput").addEventListener("change", async e => {
     engine.customBuffer = await decodeCtx.decodeAudioData(buf);
     decodeCtx.close().catch(() => {});
     $("customBtn").disabled = false;
+
+    // ---- auto-tune: detect reference RPM + clean loop points ----
+    const tune = autoTune(engine.customBuffer, PROFILES.custom.cylFactor);
+    engine.customBaseRpm = tune.baseRpm;
+    PROFILES.custom.loopStart = tune.loopStart;
+    PROFILES.custom.loopEnd = tune.loopEnd;
+    $("baseRpm").value = tune.baseRpm;
+    $("baseRpmVal").textContent = tune.baseRpm;
+
     $("statusText").textContent =
       "โหลด \"" + file.name + "\" สำเร็จ (" + engine.customBuffer.duration.toFixed(1) +
-      " วิ) — กดปุ่ม CUSTOM เพื่อใช้เสียงนี้ *ควรเป็นไฟล์เสียงเครื่องยนต์รอบคงที่แบบวนลูป";
+      " วิ) — จูนอัตโนมัติแล้ว: รอบอ้างอิง " + tune.baseRpm +
+      " (ความถี่หลัก ~" + tune.fundamentalHz.toFixed(0) + " Hz), ลูป " +
+      tune.loopStart.toFixed(2) + "–" + tune.loopEnd.toFixed(2) +
+      " วิ — กด CUSTOM เพื่อฟัง แล้วปรับ slider เพิ่มได้ถ้าต้องการ";
     document.querySelectorAll("#profiles button").forEach(b => b.classList.remove("active"));
     $("customBtn").classList.add("active");
     engine.setProfile("custom");
