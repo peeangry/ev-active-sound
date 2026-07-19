@@ -167,6 +167,41 @@
     padding: 10px 16px; background: var(--panel);
     border: 1px solid var(--line); border-radius: 12px;
   }
+
+  /* ---------- equalizer popup ---------- */
+  #eqBtn.on { background: linear-gradient(180deg, #1391c4, #0d6d96); border-color: var(--cyan); color: #fff; }
+  .eq-overlay {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; align-items: flex-end; justify-content: center;
+    background: rgba(2, 8, 16, 0.6); backdrop-filter: blur(3px);
+  }
+  .eq-overlay.hidden { display: none; }
+  .eq-card {
+    width: min(560px, calc(100vw - 24px));
+    margin-bottom: 18px;
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.5);
+  }
+  .eq-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; font-weight: 700; letter-spacing: 3px; color: var(--cyan);
+    margin-bottom: 12px;
+  }
+  .eq-mini {
+    padding: 7px 14px; font-size: 11px; font-weight: 700; letter-spacing: 1px;
+    background: var(--panel); color: var(--dim);
+    border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
+  }
+  .eq-band { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+  .eq-band input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--cyan); flex: none; }
+  .eq-band .f { width: 72px; font-size: 12px; letter-spacing: 1px; color: var(--text); flex: none; }
+  .eq-band input[type=range] { flex: 1; height: 28px; }
+  .eq-band .db {
+    width: 58px; text-align: right; font-size: 12px; color: var(--cyan);
+    font-variant-numeric: tabular-nums; flex: none;
+  }
+  .eq-band.off .f, .eq-band.off .db { color: var(--dim); opacity: 0.5; }
+  .eq-band.off input[type=range] { opacity: 0.35; }
+  .eq-note { margin-top: 10px; font-size: 11px; color: var(--dim); }
 </style>
 </head>
 <body>
@@ -251,12 +286,18 @@
     <button data-p="rHura" class="real" disabled>HURACÁN V10</button>
     <button data-p="rAvent" class="real" disabled>AVENTADOR V12</button>
     <button data-p="rGt3" class="real" disabled>911 GT3</button>
+    <button data-p="rF458" class="real" disabled>FERRARI 458</button>
+    <button data-p="rGtr" class="real" disabled>GT-R R35</button>
+    <button data-p="rGt500" class="real" disabled>SHELBY GT500</button>
+    <button data-p="rHellcat" class="real" disabled>HELLCAT</button>
+    <button data-p="rMc720" class="real" disabled>McLAREN 720S</button>
     <button data-p="custom" id="customBtn" disabled>CUSTOM</button>
   </div>
 
   <div class="controls card">
     <button id="startBtn">▶ START</button>
     <button id="muteBtn">MUTE</button>
+    <button id="eqBtn">EQ</button>
     <div class="vol-box">
       <span class="lab">VOL</span>
       <input type="range" id="volume" min="0" max="100" value="65">
@@ -280,6 +321,21 @@
 
   <div class="status">
     <span id="statusText">พร้อมใช้งาน — กด START เพื่อเริ่ม (จะขอสิทธิ์ GPS) หรือเปิดโหมดทดสอบเพื่อลองเสียง</span>
+  </div>
+
+  <!-- EQ popup — per-band on/off + gain, applies live to the running engine -->
+  <div id="eqOverlay" class="eq-overlay hidden">
+    <div class="eq-card card">
+      <div class="eq-head">
+        <span>EQUALIZER</span>
+        <div>
+          <button id="eqReset" class="eq-mini">RESET</button>
+          <button id="eqClose" class="eq-mini">✕</button>
+        </div>
+      </div>
+      <div id="eqBands"></div>
+      <div class="eq-note">ติ๊กออก = ปิดเสียงย่านนั้น • slider = เพิ่ม/ลด dB</div>
+    </div>
   </div>
 
 </div>
@@ -413,6 +469,40 @@ const PROFILES = {
     loopStart: 1.20696, loopEnd: 1.43329,   // click-free: both zero crossings, waveform continuous
     bass: 9, sub: 0.06, boost: 1.5, scream: 6, rasp: 5, raspGain: 0.32, synth: 0.10, makeup: 2.2,
   },
+  /* ---- Forza-style brand pack (same CC0 collection) — loop points are
+          auto-tuned at load time by autoTune(), so no hardcoded values ---- */
+  rF458: {
+    label: "FERRARI 458", cylFactor: 4, idleRPM: 1000, maxRPM: 9000,
+    gears: [30, 60, 95, 132, 178, 245],
+    sample: true, sampleKey: "ferrari458", lowpass: 7000,
+    bass: 8, sub: 0.08, boost: 1.5, scream: 4, rasp: 5, raspGain: 0.35, raspFreq: 2400, synth: 0.15, makeup: 2.2,
+  },
+  rGtr: {
+    label: "GT-R R35", cylFactor: 3, idleRPM: 950, maxRPM: 7100,
+    gears: [30, 58, 92, 128, 170, 235],
+    sample: true, sampleKey: "gtr35", lowpass: 6000,
+    bass: 10, sub: 0.10, boost: 1.5, scream: 3, rasp: 4.5, raspGain: 0.32, raspFreq: 1800, synth: 0.16, makeup: 2.2,
+  },
+  rGt500: {
+    label: "SHELBY GT500", cylFactor: 4, idleRPM: 850, maxRPM: 6500,
+    gears: [26, 50, 82, 118, 160, 220],
+    sample: true, sampleKey: "gt500", lowpass: 5500,
+    bassFreq: 220,
+    bass: 12, sub: 0.12, boost: 1.55, scream: 2, rasp: 4.5, raspGain: 0.35, raspFreq: 1500, synth: 0.18, makeup: 2.3,
+  },
+  rHellcat: {
+    label: "HELLCAT", cylFactor: 4, idleRPM: 850, maxRPM: 6200,
+    gears: [26, 50, 82, 118, 160, 220],
+    sample: true, sampleKey: "hellcat", lowpass: 5500,
+    bassFreq: 240,
+    bass: 13, sub: 0.12, boost: 1.55, scream: 2, rasp: 5, raspGain: 0.38, raspFreq: 1400, synth: 0.18, makeup: 2.3,
+  },
+  rMc720: {
+    label: "McLAREN 720S", cylFactor: 4, idleRPM: 1000, maxRPM: 8500,
+    gears: [30, 60, 95, 132, 178, 245],
+    sample: true, sampleKey: "mclaren720", lowpass: 6500,
+    bass: 8, sub: 0.08, boost: 1.5, scream: 3.5, rasp: 5, raspGain: 0.34, raspFreq: 2200, synth: 0.14, makeup: 2.2,
+  },
   custom: {
     label: "CUSTOM", cylFactor: 4, idleRPM: 850, maxRPM: 7000,
     gears: [24, 48, 78, 112, 155, 215],
@@ -519,6 +609,17 @@ function autoTune(buf, cylFactor = 4) {
   return { baseRpm, loopStart, loopEnd, fundamentalHz };
 }
 
+/* ---- user equalizer state (popup) — survives engine restarts ---- */
+const EQ_CUT_DB = -40;   // "band off" = bury it
+const EQ_BANDS = [
+  { f: 60,   label: "60 Hz",   type: "lowshelf",  gain: 0, on: true },
+  { f: 150,  label: "150 Hz",  type: "peaking",   gain: 0, on: true },
+  { f: 400,  label: "400 Hz",  type: "peaking",   gain: 0, on: true },
+  { f: 1000, label: "1 kHz",   type: "peaking",   gain: 0, on: true },
+  { f: 2500, label: "2.5 kHz", type: "peaking",   gain: 0, on: true },
+  { f: 6000, label: "6 kHz",   type: "highshelf", gain: 0, on: true },
+];
+
 class EngineAudio {
   constructor() {
     this.ctx = null;
@@ -555,7 +656,19 @@ class EngineAudio {
     lowpass.frequency.value = p.lowpass;
     lowpass.Q.value = 0.8;
 
-    lowpass.connect(comp).connect(master).connect(analyser).connect(ctx.destination);
+    // user EQ chain (popup) — peaking/shelf per band, sits after the master
+    this.eqFilters = EQ_BANDS.map(b => {
+      const f = ctx.createBiquadFilter();
+      f.type = b.type;
+      f.frequency.value = b.f;
+      if (b.type === "peaking") f.Q.value = 0.9;
+      f.gain.value = b.on ? b.gain : EQ_CUT_DB;
+      return f;
+    });
+    let eqTail = master;
+    for (const f of this.eqFilters) { eqTail.connect(f); eqTail = f; }
+    lowpass.connect(comp).connect(master);
+    eqTail.connect(analyser).connect(ctx.destination);
     this.analyser = analyser;
 
     const sampleBuf = p.sample
@@ -740,6 +853,13 @@ class EngineAudio {
     this.running = true;
   }
 
+  applyEqBand(i) {
+    // push current EQ_BANDS[i] state into the live filter (if running)
+    if (!this.running || !this.eqFilters) return;
+    const b = EQ_BANDS[i], f = this.eqFilters[i], t = this.ctx.currentTime;
+    f.gain.setTargetAtTime(b.on ? b.gain : EQ_CUT_DB, t, 0.03);
+  }
+
   stop() {
     if (!this.running) return;
     clearInterval(this.jitterTimer);
@@ -920,7 +1040,20 @@ if (window.REAL_SOUNDS) {
   });
   Promise.allSettled(jobs).then(() => {
     document.querySelectorAll("#profiles button.real").forEach(b => {
-      if (REAL_BUFFERS[PROFILES[b.dataset.p].sampleKey]) b.disabled = false;
+      const p = PROFILES[b.dataset.p];
+      const buf = REAL_BUFFERS[p.sampleKey];
+      if (!buf) return;
+      // profiles without hand-tuned loop points get the same auto-tune
+      // treatment as uploads: steadiest-pitch region + zero-crossing seam
+      if (p.loopStart == null) {
+        try {
+          const tune = autoTune(buf, p.cylFactor);
+          p.loopStart = tune.loopStart;
+          p.loopEnd = tune.loopEnd;
+          if (p.baseRpm == null) p.baseRpm = tune.baseRpm;
+        } catch (e) { /* fall back to whole-file loop */ }
+      }
+      b.disabled = false;
     });
   });
 }
@@ -1073,6 +1206,58 @@ $("muteBtn").addEventListener("click", () => {
 });
 
 $("volume").addEventListener("input", e => engine.setVolume(e.target.value / 100));
+
+/* ---- equalizer popup ---- */
+(function buildEq() {
+  const wrap = $("eqBands");
+  EQ_BANDS.forEach((b, i) => {
+    const row = document.createElement("div");
+    row.className = "eq-band";
+    row.innerHTML =
+      '<input type="checkbox" checked>' +
+      '<span class="f">' + b.label + '</span>' +
+      '<input type="range" min="-15" max="15" step="1" value="0">' +
+      '<span class="db">0 dB</span>';
+    const [chk, , slider, db] = row.children;
+    chk.addEventListener("change", () => {
+      b.on = chk.checked;
+      row.classList.toggle("off", !b.on);
+      engine.applyEqBand(i);
+    });
+    slider.addEventListener("input", () => {
+      b.gain = +slider.value;
+      db.textContent = (b.gain > 0 ? "+" : "") + b.gain + " dB";
+      engine.applyEqBand(i);
+    });
+    wrap.appendChild(row);
+  });
+  $("eqReset").addEventListener("click", () => {
+    EQ_BANDS.forEach((b, i) => {
+      b.on = true; b.gain = 0;
+      const row = wrap.children[i];
+      row.classList.remove("off");
+      row.children[0].checked = true;
+      row.children[2].value = 0;
+      row.children[3].textContent = "0 dB";
+      engine.applyEqBand(i);
+    });
+  });
+  const overlay = $("eqOverlay");
+  $("eqBtn").addEventListener("click", () => {
+    overlay.classList.toggle("hidden");
+    $("eqBtn").classList.toggle("on", !overlay.classList.contains("hidden"));
+  });
+  $("eqClose").addEventListener("click", () => {
+    overlay.classList.add("hidden");
+    $("eqBtn").classList.remove("on");
+  });
+  overlay.addEventListener("click", e => {
+    if (e.target === overlay) {
+      overlay.classList.add("hidden");
+      $("eqBtn").classList.remove("on");
+    }
+  });
+})();
 
 $("profiles").addEventListener("click", e => {
   const btn = e.target.closest("button");
