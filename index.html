@@ -243,6 +243,7 @@
   <div class="profiles" id="profiles">
     <button data-p="comfort">COMFORT</button>
     <button data-p="standard" class="active">STANDARD</button>
+    <button data-p="standardV2">STD V2</button>
     <button data-p="sport">SPORT</button>
     <button data-p="track">TRACK</button>
     <button data-p="cyber">CYBER</button>
@@ -314,6 +315,21 @@ const PROFILES = {
     drive: 2.6, amDepth: 0.28, jitter: 9,
     noiseGain: 0.16, noiseMult: 2.4, lowpass: 2400,
   },
+  standardV2: {
+    /* deeper, punchier STANDARD: richer bass, higher drive, backfire pop on decel */
+    label: "STANDARD V2", cylFactor: 4, idleRPM: 780, maxRPM: 6600,
+    gears: [24, 48, 78, 112, 155, 215],
+    harmonics: [
+      { mult: 0.5, wave: "engine",  gain: 0.62, rolloff: 1.6, evenMix: 0.4 },
+      { mult: 1.0, wave: "engine",  gain: 0.48, rolloff: 1.3, evenMix: 0.6 },
+      { mult: 1.5, wave: "engine",  gain: 0.18, rolloff: 1.8, evenMix: 1.0 },
+      { mult: 2.0, wave: "engine",  gain: 0.14, rolloff: 2.0, evenMix: 0.5 },
+      { mult: 4.5, wave: "sine",    gain: 0.08 },  // high-freq backfire pop on decel
+    ],
+    drive: 3.2, amDepth: 0.28, jitter: 9,
+    noiseGain: 0.18, noiseMult: 2.4, lowpass: 2400,
+    backfire: true,  // flag for decel pop synthesis
+  },
   sport: {
     label: "SPORT", cylFactor: 4, idleRPM: 950, maxRPM: 8200,
     gears: [30, 58, 90, 128, 172, 235],
@@ -382,7 +398,7 @@ const PROFILES = {
     gears: [34, 64, 98, 138, 185, 250],
     sample: true, sampleKey: "aventador", baseRpm: 3500, lowpass: 9000,
     loopStart: 14.8, loopEnd: 16.8,
-    bass: 8, sub: 0.14, boost: 1.55, scream: 6, rasp: 4, raspGain: 0.28, synth: 0.24, makeup: 2.2,
+    bass: 8, sub: 0.04, boost: 1.55, scream: 8, rasp: 5, raspGain: 0.35, synth: 0.24, makeup: 2.3,
   },
   rGt3: {
     /* clip is a rev-sweep (61→185 Hz), not a steady loop — loop only the
@@ -391,7 +407,7 @@ const PROFILES = {
     gears: [30, 60, 95, 132, 175, 240],
     sample: true, sampleKey: "gt3", baseRpm: 3300, lowpass: 9000,
     loopStart: 1.20696, loopEnd: 1.43329,   // click-free: both zero crossings, waveform continuous
-    bass: 7, sub: 0.12, boost: 1.5, scream: 7, rasp: 5, raspGain: 0.32, synth: 0.20, makeup: 2.2,
+    bass: 9, sub: 0.06, boost: 1.5, scream: 6, rasp: 5, raspGain: 0.32, synth: 0.10, makeup: 2.2,
   },
   custom: {
     label: "CUSTOM", cylFactor: 4, idleRPM: 850, maxRPM: 7000,
@@ -511,6 +527,7 @@ class EngineAudio {
     this.customBaseRpm = 2500;
     this.jitterTimer = null;
     this.analyser = null;
+    this.lastLoad = 0;  // for backfire decel detection
   }
 
   get profile() { return PROFILES[this.profileKey]; }
@@ -765,11 +782,18 @@ class EngineAudio {
       }
       if (this.nodes.synth) {
         // simulated harmonics track the firing order across the whole range
-        for (const o of this.nodes.synth.oscs) {
+        for (let i = 0; i < this.nodes.synth.oscs.length; i++) {
+          const o = this.nodes.synth.oscs[i];
           o.osc.frequency.setTargetAtTime(Math.min(firing * o.mult, 9000), t, 0.05);
+          // backfire pop: amplify high-freq (4.5x) when load drops >40% in one update
+          if (p.backfire && o.mult === 4.5 && this.lastLoad > 0.6 && load < 0.2) {
+            o.gain.setTargetAtTime(0.8, t, 0.01);
+            o.gain.setTargetAtTime(0.08, t + 0.06, 0.04);  // decay pop within 60ms
+          }
         }
         this.nodes.synth.g.gain.setTargetAtTime((p.synth || 0) * (0.4 + 0.6 * load), t, 0.1);
       }
+      this.lastLoad = load;
     } else {
       const firing = (rpm / 60) * p.cylFactor;
       for (const o of this.nodes.oscs) {
