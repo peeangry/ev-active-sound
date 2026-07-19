@@ -397,10 +397,12 @@ const PROFILES = {
        much heavier low end (ทุ้มแน่น) that still snarls under throttle (แผดคำราม) */
     label: "AVENTADOR V12", cylFactor: 6, idleRPM: 1000, maxRPM: 8700,
     gears: [34, 64, 98, 138, 185, 250],
-    sample: true, sampleKey: "aventador", baseRpm: 3500, lowpass: 9000,
+    sample: true, sampleKey: "aventador", baseRpm: 3500, lowpass: 6000,
     loopStart: 14.8, loopEnd: 16.8,
     bassFreq: 240,  // wider low-shelf so the body sits deeper/fuller
-    bass: 13, sub: 0.09, boost: 1.55, scream: 6.5, rasp: 5, raspGain: 0.40, synth: 0.18, makeup: 2.3,
+    // lowpass 6000 + scream 3 kill the pitch-shifted whine at high rpm;
+    // rasp moved down to 1900 Hz = throaty roar instead of whistle
+    bass: 13, sub: 0.09, boost: 1.55, scream: 3, rasp: 5, raspGain: 0.42, raspFreq: 1900, synth: 0.18, makeup: 2.3,
   },
   rGt3: {
     /* clip is a rev-sweep (61→185 Hz), not a steady loop — loop only the
@@ -601,7 +603,8 @@ class EngineAudio {
         raspShaper.oversample = "2x";
         const raspBP = ctx.createBiquadFilter();
         raspBP.type = "bandpass";
-        raspBP.frequency.value = 3400;
+        // profile-tunable band center — lower = growl/roar, higher = scream
+        raspBP.frequency.value = p.raspFreq != null ? p.raspFreq : 3400;
         raspBP.Q.value = 0.8;
         const raspG = ctx.createGain();
         raspG.gain.value = 0;
