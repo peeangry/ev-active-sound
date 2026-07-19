@@ -30,6 +30,9 @@
     justify-content: center;
     padding: 14px;
     user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;      /* kill double-tap zoom on car screens */
+    overscroll-behavior: none;       /* no rubber-band bounce while dragging sliders */
   }
   .app { width: 100%; max-width: 1150px; display: flex; flex-direction: column; gap: 12px; }
 
@@ -150,7 +153,7 @@
   #muteBtn.on { background: var(--amber); color: #111; border-color: var(--amber); }
   .vol-box { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 180px; }
   .vol-box .lab { font-size: 11px; letter-spacing: 2px; color: var(--dim); }
-  input[type=range] { flex: 1; height: 34px; accent-color: var(--cyan); }
+  input[type=range] { flex: 1; height: 44px; accent-color: var(--cyan); }
   .upload-lab {
     padding: 15px 20px; font-size: 13px; font-weight: 600;
     border: 1px dashed #2a3c55; border-radius: 12px; color: var(--cyan);
@@ -705,6 +708,12 @@ class EngineAudio {
     if (this.running) return;
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
     const ctx = this.ctx;
+    // in-car browsers (Tesla) can hand back a suspended context even after a
+    // tap — resume now and again whenever the browser suspends it
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    ctx.onstatechange = () => {
+      if (this.running && ctx.state === "suspended") ctx.resume().catch(() => {});
+    };
     const p = this.profile;
 
     const master = ctx.createGain();
@@ -715,6 +724,12 @@ class EngineAudio {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -18;
     comp.ratio.value = 6;
+    // sub-sonic guard — strips DC / <28 Hz rumble that big car subwoofers
+    // would otherwise reproduce as noise
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 28;
+    hp.Q.value = 0.7;
     const lowpass = ctx.createBiquadFilter();
     lowpass.type = "lowpass";
     lowpass.frequency.value = p.lowpass;
@@ -731,8 +746,16 @@ class EngineAudio {
     });
     let eqTail = master;
     for (const f of this.eqFilters) { eqTail.connect(f); eqTail = f; }
-    lowpass.connect(comp).connect(master);
-    eqTail.connect(analyser).connect(ctx.destination);
+    // brickwall safety limiter — EQ boosts + makeup gain can push past 0 dBFS;
+    // this keeps the car system clean instead of crackling (กันเสียงแตก)
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -3;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.15;
+    lowpass.connect(hp).connect(comp).connect(master);
+    eqTail.connect(limiter).connect(analyser).connect(ctx.destination);
     this.analyser = analyser;
 
     const sampleBuf = p.sample
@@ -854,7 +877,7 @@ class EngineAudio {
         g.gain.value = h.gain;
         osc.connect(g).connect(oscSum);
         osc.start();
-        return { osc, mult: h.mult };
+        return { osc, mult: h.mult, g };   // g kept so backfire can pulse it
       });
 
       const shaper = ctx.createWaveShaper();
@@ -929,8 +952,10 @@ class EngineAudio {
     clearInterval(this.jitterTimer);
     this.jitterTimer = null;
     const ctx = this.ctx;
-    this.nodes.master.gain.setTargetAtTime(0, ctx.currentTime, 0.08);
-    setTimeout(() => ctx.close().catch(() => {}), 350);
+    ctx.onstatechange = null;
+    // quick fade so the teardown never clicks, then release the context
+    this.nodes.master.gain.setTargetAtTime(0, ctx.currentTime, 0.045);
+    setTimeout(() => ctx.close().catch(() => {}), 260);
     this.running = false;
     this.nodes = null;
     this.ctx = null;
@@ -940,8 +965,10 @@ class EngineAudio {
   setProfile(key) {
     this.profileKey = key;
     if (this.running) {
+      // fade-out + rebuild; master ramps back in via update() so the
+      // switch reads as a quick crossfade rather than a dropout
       this.stop();
-      setTimeout(() => this.start(), 380);
+      setTimeout(() => { if (!this.running) this.start(); }, 190);
     }
   }
 
@@ -977,22 +1004,38 @@ class EngineAudio {
       }
       if (this.nodes.synth) {
         // simulated harmonics track the firing order across the whole range
-        for (let i = 0; i < this.nodes.synth.oscs.length; i++) {
-          const o = this.nodes.synth.oscs[i];
+        for (const o of this.nodes.synth.oscs) {
           o.osc.frequency.setTargetAtTime(Math.min(firing * o.mult, 9000), t, 0.05);
-          // backfire pop: amplify high-freq (4.5x) when load drops >40% in one update
-          if (p.backfire && o.mult === 4.5 && this.lastLoad > 0.6 && load < 0.2) {
-            o.gain.setTargetAtTime(0.8, t, 0.01);
-            o.gain.setTargetAtTime(0.08, t + 0.06, 0.04);  // decay pop within 60ms
-          }
         }
         this.nodes.synth.g.gain.setTargetAtTime((p.synth || 0) * (0.4 + 0.6 * load), t, 0.1);
       }
-      this.lastLoad = load;
     } else {
       const firing = (rpm / 60) * p.cylFactor;
+      // backfire detector: load decays smoothly, so compare against a slowly
+      // decaying peak — a real "throttle lift" is peak high + load now low
+      let pop = false;
+      if (p.backfire) {
+        this.loadPeak = Math.max(load, (this.loadPeak || 0) * 0.985);
+        if (this.loadPeak > 0.5 && load < 0.15 && t - (this.lastPopT || 0) > 1.2) {
+          pop = true;
+          this.lastPopT = t;
+          this.loadPeak = 0;
+        }
+      }
       for (const o of this.nodes.oscs) {
         o.osc.frequency.setTargetAtTime(firing * o.mult, t, 0.05);
+        // fire a decaying burst of pops (ตดปุ้งๆ) through the shaper
+        if (pop && o.mult === 4.5 && o.g) {
+          const bg = o.g.gain;
+          const base = 0.08;
+          bg.cancelScheduledValues(t);
+          bg.setValueAtTime(0.9, t);                    // ปุ้ง!
+          bg.setTargetAtTime(base, t + 0.02, 0.03);
+          bg.setValueAtTime(0.65, t + 0.11);            // ปุ้ง
+          bg.setTargetAtTime(base, t + 0.13, 0.03);
+          bg.setValueAtTime(0.45, t + 0.23);            // ปุ้ง...
+          bg.setTargetAtTime(base, t + 0.25, 0.05);
+        }
       }
       this.nodes.lfo.frequency.setTargetAtTime(rpm / 60, t, 0.1);
       this.nodes.bp.frequency.setTargetAtTime(
@@ -1004,6 +1047,7 @@ class EngineAudio {
         this.nodes.turbo.g.gain.setTargetAtTime(load * p.turbo.gain, t, 0.25);
       }
     }
+    this.lastLoad = load;
   }
 }
 
@@ -1045,8 +1089,8 @@ class GpsSpeed {
       pos => this.handle(pos),
       err => {
         const msgs = {
-          1: "ถูกปฏิเสธสิทธิ์ตำแหน่ง — ต้องอนุญาต และหน้าเว็บต้องเป็น HTTPS",
-          2: "หาตำแหน่ง GPS ไม่ได้",
+          1: "ถูกปฏิเสธสิทธิ์ตำแหน่ง — อนุญาต Location หรือเปิด 'โหมดทดสอบ' แทน",
+          2: "หาตำแหน่ง GPS ไม่ได้ — ลองเปิด 'โหมดทดสอบ' แทน",
           3: "GPS หมดเวลารอ กำลังลองใหม่…",
         };
         this.onStatus("err", msgs[err.code] || err.message);
@@ -1114,7 +1158,7 @@ function loadRealSound(key) {
         const bytes = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         delete REAL_SOUNDS[key];   // free the base64 copy once decoded
-        const dctx = new OfflineAudioContext(1, 1, 44100);
+        const dctx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 1, 44100);
         dctx.decodeAudioData(bytes.buffer).then(buf => {
           REAL_BUFFERS[key] = buf;
           resolve(buf);
@@ -1222,22 +1266,42 @@ function drawEq() {
   ctx2.globalAlpha = 1;
 }
 
-/* ---- main loop ---- */
+/* ---- main loop ----
+   All smoothing is dt-based so the sound behaves identically at 30 / 60 /
+   120 fps (in-car browsers throttle requestAnimationFrame freely). */
 const ARC_LEN = 527.8 * 0.75;   // 270° of the gauge circle
-function loop() {
-  smoothSpeed += (targetSpeed - smoothSpeed) * 0.06;
+let lastFrameT = performance.now();
 
-  const accel = (smoothSpeed - lastSmooth) * 60;      // km/h per second
+function physicsStep(dt) {
+  // exponential smoothing via time constants (tau in seconds)
+  const aSpd = 1 - Math.exp(-dt / 0.27);
+  smoothSpeed += (targetSpeed - smoothSpeed) * aSpd;
+
+  const accel = dt > 0 ? (smoothSpeed - lastSmooth) / dt : 0;   // km/h per second
   lastSmooth = smoothSpeed;
-  accelSmooth += (accel - accelSmooth) * 0.08;
+  accelSmooth += (accel - accelSmooth) * (1 - Math.exp(-dt / 0.2));
   const load = Math.min(Math.max(accelSmooth / 8, 0), 1);
   const loadDisp = Math.min(load * 0.8 + (smoothSpeed / 250) * 0.35, 1);
 
   const tempTarget = 34 + loadDisp * 55;
-  motorTemp += (tempTarget - motorTemp) * 0.0012;
+  motorTemp += (tempTarget - motorTemp) * (1 - Math.exp(-dt / 14));
 
   const { rpm, gear } = speedToRpmGear(smoothSpeed, engine.profile);
   engine.update(rpm, load);
+  return { rpm, gear, load, loadDisp };
+}
+
+// audio must keep tracking speed even when the browser pauses rAF
+// (screen dim, tab switch) — a light interval takes over updates
+setInterval(() => {
+  if (document.hidden) physicsStep(0.25);
+}, 250);
+
+function loop(now) {
+  now = now || performance.now();
+  const dt = Math.min(Math.max((now - lastFrameT) / 1000, 0.001), 0.25);
+  lastFrameT = now;
+  const { rpm, gear, load, loadDisp } = physicsStep(dt);
 
   /* gauge */
   $("speedVal").textContent = Math.round(smoothSpeed);
@@ -1268,10 +1332,32 @@ loop();   // visuals run even before the engine starts
 /* ================================================================
    UI wiring
    ================================================================ */
+/* keep the screen awake while the engine runs (dashboards / phones) */
+let wakeLock = null;
+function acquireWakeLock() {
+  if (!("wakeLock" in navigator)) return;
+  navigator.wakeLock.request("screen")
+    .then(wl => { wakeLock = wl; })
+    .catch(() => {});
+}
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+}
+document.addEventListener("visibilitychange", () => {
+  if (started && document.visibilityState === "visible") acquireWakeLock();
+});
+
 $("startBtn").addEventListener("click", () => {
   if (!started) {
+    // no geolocation at all (some in-car browsers) → flip to demo mode so
+    // the app still works instead of sitting on an error
+    if (!demoMode && !("geolocation" in navigator)) {
+      $("demoChk").checked = true;
+      $("demoChk").dispatchEvent(new Event("change"));
+    }
     engine.start();
     if (!demoMode) gps.start();
+    acquireWakeLock();
     started = true;
     $("startBtn").textContent = "■ STOP";
     $("startBtn").classList.add("on");
@@ -1279,6 +1365,7 @@ $("startBtn").addEventListener("click", () => {
   } else {
     engine.stop();
     gps.stop();
+    releaseWakeLock();
     started = false;
     targetSpeed = 0;
     $("startBtn").textContent = "▶ START";
