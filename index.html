@@ -630,10 +630,9 @@ class EngineAudio {
         const synthSum = ctx.createGain();
         synthSum.gain.value = 1;
         const sOscs = [
+          // low "engine" waves only — the 3x/4x sawtooths whined (วี๊ด) at high rpm
           { mult: 1.0, wave: "engine",  gain: 0.50, rolloff: 1.1, evenMix: 0.6 },
           { mult: 2.0, wave: "engine",  gain: 0.30, rolloff: 1.3, evenMix: 0.8 },
-          { mult: 3.0, wave: "sawtooth", gain: 0.16 },
-          { mult: 4.0, wave: "sawtooth", gain: 0.09 },
         ].map(h => {
           const osc = ctx.createOscillator();
           if (h.wave === "engine") osc.setPeriodicWave(makeEngineWave(ctx, h.rolloff, h.evenMix));
