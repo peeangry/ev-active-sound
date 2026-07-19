@@ -132,6 +132,11 @@
     border-color: var(--amber); color: #fff;
     box-shadow: 0 0 18px rgba(255, 196, 77, 0.25);
   }
+  .profiles button.loading {
+    border-color: var(--amber); color: var(--amber);
+    animation: loadPulse 0.9s ease-in-out infinite;
+  }
+  @keyframes loadPulse { 50% { opacity: 0.4; } }
 
   /* ---------- controls ---------- */
   .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -283,22 +288,22 @@
     <button data-p="track">TRACK</button>
     <button data-p="cyber">CYBER</button>
     <button data-p="mario">MARIO KART</button>
-    <button data-p="rHura" class="real" disabled>HURACÁN V10</button>
-    <button data-p="rAvent" class="real" disabled>AVENTADOR V12</button>
-    <button data-p="rGt3" class="real" disabled>911 GT3</button>
-    <button data-p="rF458" class="real" disabled>FERRARI 458</button>
-    <button data-p="rGtr" class="real" disabled>GT-R R35</button>
-    <button data-p="rGt500" class="real" disabled>SHELBY GT500</button>
-    <button data-p="rHellcat" class="real" disabled>HELLCAT</button>
-    <button data-p="rMc720" class="real" disabled>McLAREN 720S</button>
-    <button data-p="rLfa" class="real" disabled>LEXUS LFA</button>
-    <button data-p="rZonda" class="real" disabled>ZONDA R</button>
-    <button data-p="rVeyron" class="real" disabled>VEYRON W16</button>
-    <button data-p="rViper" class="real" disabled>VIPER V10</button>
-    <button data-p="rC63" class="real" disabled>C63 AMG</button>
-    <button data-p="rSupra" class="real" disabled>SUPRA 2JZ</button>
-    <button data-p="r787b" class="real" disabled>MAZDA 787B</button>
-    <button data-p="rVulcan" class="real" disabled>VULCAN V12</button>
+    <button data-p="rHura" class="real">HURACÁN V10</button>
+    <button data-p="rAvent" class="real">AVENTADOR V12</button>
+    <button data-p="rGt3" class="real">911 GT3</button>
+    <button data-p="rF458" class="real">FERRARI 458</button>
+    <button data-p="rGtr" class="real">GT-R R35</button>
+    <button data-p="rGt500" class="real">SHELBY GT500</button>
+    <button data-p="rHellcat" class="real">HELLCAT</button>
+    <button data-p="rMc720" class="real">McLAREN 720S</button>
+    <button data-p="rLfa" class="real">LEXUS LFA</button>
+    <button data-p="rZonda" class="real">ZONDA R</button>
+    <button data-p="rVeyron" class="real">VEYRON W16</button>
+    <button data-p="rViper" class="real">VIPER V10</button>
+    <button data-p="rC63" class="real">C63 AMG</button>
+    <button data-p="rSupra" class="real">SUPRA 2JZ</button>
+    <button data-p="r787b" class="real">MAZDA 787B</button>
+    <button data-p="rVulcan" class="real">VULCAN V12</button>
     <button data-p="custom" id="customBtn" disabled>CUSTOM</button>
   </div>
 
@@ -348,7 +353,6 @@
 
 </div>
 
-<script src="sounds.js"></script>
 <script>
 "use strict";
 
@@ -447,7 +451,8 @@ const PROFILES = {
     noiseGain: 0.025, noiseMult: 5.5, lowpass: 6800,
     turbo: { gain: 0.05 },   // rising electric whir on top
   },
-  /* ---- real recordings, bundled in sounds.js (CC0 — archive.org/details/car-engines) ---- */
+  /* ---- real recordings, lazy-loaded from sounds/<key>.js on first use
+          (CC0 — archive.org/details/car-engines) ---- */
   rHura: {
     /* recording is a steady idle — loop the clean 0-3s stretch */
     label: "HURACÁN V10", cylFactor: 5, idleRPM: 1000, maxRPM: 8500,
@@ -1087,33 +1092,59 @@ function haversine(lat1, lon1, lat2, lon2) {
 const $ = id => document.getElementById(id);
 const engine = new EngineAudio();
 
-/* ---- decode bundled real-car recordings (sounds.js) ---- */
+/* ---- lazy loader for real-car recordings (sounds/<key>.js) ----
+   Each car ships as its own script file and is fetched the first time
+   its button is pressed, so the initial page load stays light. Script
+   injection (not fetch) so it also works from file:// */
 window.REAL_BUFFERS = {};
-if (window.REAL_SOUNDS) {
-  const dctx = new OfflineAudioContext(1, 1, 44100);
-  const jobs = Object.entries(REAL_SOUNDS).map(([key, b64]) => {
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return dctx.decodeAudioData(bytes.buffer).then(buf => { REAL_BUFFERS[key] = buf; });
+window.REAL_SOUNDS = window.REAL_SOUNDS || {};
+const REAL_LOADING = {};   // key -> in-flight Promise<AudioBuffer>
+
+function loadRealSound(key) {
+  if (REAL_BUFFERS[key]) return Promise.resolve(REAL_BUFFERS[key]);
+  if (REAL_LOADING[key]) return REAL_LOADING[key];
+  REAL_LOADING[key] = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "sounds/" + key + ".js";
+    s.onload = () => {
+      try {
+        const b64 = REAL_SOUNDS[key];
+        if (!b64) throw new Error("no data in sounds/" + key + ".js");
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        delete REAL_SOUNDS[key];   // free the base64 copy once decoded
+        const dctx = new OfflineAudioContext(1, 1, 44100);
+        dctx.decodeAudioData(bytes.buffer).then(buf => {
+          REAL_BUFFERS[key] = buf;
+          resolve(buf);
+        }, reject);
+      } catch (e) { reject(e); }
+    };
+    s.onerror = () => reject(new Error("failed to load sounds/" + key + ".js"));
+    document.head.appendChild(s);
+  }).catch(err => {
+    delete REAL_LOADING[key];   // allow retry after a failed load
+    throw err;
   });
-  Promise.allSettled(jobs).then(() => {
-    document.querySelectorAll("#profiles button.real").forEach(b => {
-      const p = PROFILES[b.dataset.p];
-      const buf = REAL_BUFFERS[p.sampleKey];
-      if (!buf) return;
-      // profiles without hand-tuned loop points get the same auto-tune
-      // treatment as uploads: steadiest-pitch region + zero-crossing seam
-      if (p.loopStart == null) {
-        try {
-          const tune = autoTune(buf, p.cylFactor);
-          p.loopStart = tune.loopStart;
-          p.loopEnd = tune.loopEnd;
-          if (p.baseRpm == null) p.baseRpm = tune.baseRpm;
-        } catch (e) { /* fall back to whole-file loop */ }
-      }
-      b.disabled = false;
-    });
+  return REAL_LOADING[key];
+}
+
+/* load + decode + one-time autoTune for a real-car profile */
+function ensureRealProfile(pKey) {
+  const p = PROFILES[pKey];
+  return loadRealSound(p.sampleKey).then(buf => {
+    // profiles without hand-tuned loop points get the same auto-tune
+    // treatment as uploads: steadiest-pitch region + zero-crossing seam
+    if (p.loopStart == null) {
+      try {
+        const tune = autoTune(buf, p.cylFactor);
+        p.loopStart = tune.loopStart;
+        p.loopEnd = tune.loopEnd;
+        if (p.baseRpm == null) p.baseRpm = tune.baseRpm;
+      } catch (e) { /* fall back to whole-file loop */ }
+    }
+    return buf;
   });
 }
 
@@ -1318,13 +1349,39 @@ $("volume").addEventListener("input", e => engine.setVolume(e.target.value / 100
   });
 })();
 
+let profileClickToken = 0;   // ignore stale async loads when user clicks around
 $("profiles").addEventListener("click", e => {
   const btn = e.target.closest("button");
   if (!btn || btn.disabled) return;
-  document.querySelectorAll("#profiles button").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
-  engine.setProfile(btn.dataset.p);
-  $("tuneBox").classList.toggle("show", btn.dataset.p === "custom");
+  const key = btn.dataset.p;
+  const p = PROFILES[key];
+  const token = ++profileClickToken;
+
+  const activate = () => {
+    document.querySelectorAll("#profiles button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    engine.setProfile(key);
+    $("tuneBox").classList.toggle("show", key === "custom");
+  };
+
+  // real-car profile whose sample isn't in memory yet → lazy-load first
+  if (p.sampleKey && !REAL_BUFFERS[p.sampleKey]) {
+    btn.classList.add("loading");
+    const prevStatus = $("statusText").textContent;
+    $("statusText").textContent = "กำลังโหลดเสียง " + p.label + "…";
+    ensureRealProfile(key).then(() => {
+      btn.classList.remove("loading");
+      if (token !== profileClickToken) return;   // user moved on
+      $("statusText").textContent = prevStatus;
+      activate();
+    }).catch(() => {
+      btn.classList.remove("loading");
+      if (token !== profileClickToken) return;
+      $("statusText").textContent = "โหลดเสียง " + p.label + " ไม่สำเร็จ — ลองใหม่อีกครั้ง";
+    });
+    return;
+  }
+  activate();
 });
 
 $("fileInput").addEventListener("change", async e => {
