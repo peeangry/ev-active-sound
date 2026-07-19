@@ -385,11 +385,12 @@ const PROFILES = {
     bass: 8, sub: 0.14, boost: 1.55, scream: 6, rasp: 4, raspGain: 0.28, synth: 0.24, makeup: 2.2,
   },
   rGt3: {
-    /* clip fades out after ~2s — loop the strong part only */
+    /* clip is a rev-sweep (61→185 Hz), not a steady loop — loop only the
+       flattest-pitch stretch (~165 Hz) so it doesn't pulse/rev on repeat */
     label: "911 GT3", cylFactor: 3, idleRPM: 900, maxRPM: 9000,
     gears: [30, 60, 95, 132, 175, 240],
-    sample: true, sampleKey: "gt3", baseRpm: 3800, lowpass: 9000,
-    loopStart: 0.05, loopEnd: 1.85,
+    sample: true, sampleKey: "gt3", baseRpm: 3300, lowpass: 9000,
+    loopStart: 1.20696, loopEnd: 1.43329,   // click-free: both zero crossings, waveform continuous
     bass: 7, sub: 0.12, boost: 1.5, scream: 7, rasp: 5, raspGain: 0.32, synth: 0.20, makeup: 2.2,
   },
   custom: {
