@@ -393,12 +393,14 @@ const PROFILES = {
     bass: 6, sub: 0.12, boost: 1.55, scream: 7, rasp: 4.5, raspGain: 0.30, synth: 0.22, makeup: 2.2,
   },
   rAvent: {
-    /* steadiest rev stretch of the recording */
+    /* steadiest rev stretch of the recording — tuned Huracán-smooth but with a
+       much heavier low end (ทุ้มแน่น) that still snarls under throttle (แผดคำราม) */
     label: "AVENTADOR V12", cylFactor: 6, idleRPM: 1000, maxRPM: 8700,
     gears: [34, 64, 98, 138, 185, 250],
     sample: true, sampleKey: "aventador", baseRpm: 3500, lowpass: 9000,
     loopStart: 14.8, loopEnd: 16.8,
-    bass: 8, sub: 0.04, boost: 1.55, scream: 8, rasp: 5, raspGain: 0.35, synth: 0.24, makeup: 2.3,
+    bassFreq: 240,  // wider low-shelf so the body sits deeper/fuller
+    bass: 13, sub: 0.09, boost: 1.55, scream: 6.5, rasp: 5, raspGain: 0.40, synth: 0.18, makeup: 2.3,
   },
   rGt3: {
     /* clip is a rev-sweep (61→185 Hz), not a steady loop — loop only the
@@ -568,7 +570,7 @@ class EngineAudio {
       // low-shelf warmth — thickens the recording's low end (ทุ้ม)
       const shelf = ctx.createBiquadFilter();
       shelf.type = "lowshelf";
-      shelf.frequency.value = 190;
+      shelf.frequency.value = p.bassFreq != null ? p.bassFreq : 190;
       shelf.gain.value = p.bass != null ? p.bass : 6;
 
       // high-shelf scream — lifts the top end for the raspy wail (แผด)
