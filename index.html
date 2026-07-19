@@ -650,9 +650,16 @@ class EngineAudio {
         const synthShaper = ctx.createWaveShaper();
         synthShaper.curve = distCurve(2.4);
         synthShaper.oversample = "2x";
+        // body-only lowpass — the engine-wave harmonics + distortion pile up
+        // real energy at 2–6 kHz which whistles (หวีด) as rpm climbs; keep the
+        // synth layer to its low-end job and let the recording own the top
+        const synthLp = ctx.createBiquadFilter();
+        synthLp.type = "lowpass";
+        synthLp.frequency.value = 1300;
+        synthLp.Q.value = 0.7;
         const synthGain = ctx.createGain();
         synthGain.gain.value = 0;
-        synthSum.connect(synthShaper).connect(synthGain).connect(lowpass);
+        synthSum.connect(synthShaper).connect(synthLp).connect(synthGain).connect(lowpass);
         synth = { oscs: sOscs, g: synthGain };
       }
 
