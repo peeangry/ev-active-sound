@@ -291,6 +291,14 @@
     <button data-p="rGt500" class="real" disabled>SHELBY GT500</button>
     <button data-p="rHellcat" class="real" disabled>HELLCAT</button>
     <button data-p="rMc720" class="real" disabled>McLAREN 720S</button>
+    <button data-p="rLfa" class="real" disabled>LEXUS LFA</button>
+    <button data-p="rZonda" class="real" disabled>ZONDA R</button>
+    <button data-p="rVeyron" class="real" disabled>VEYRON W16</button>
+    <button data-p="rViper" class="real" disabled>VIPER V10</button>
+    <button data-p="rC63" class="real" disabled>C63 AMG</button>
+    <button data-p="rSupra" class="real" disabled>SUPRA 2JZ</button>
+    <button data-p="r787b" class="real" disabled>MAZDA 787B</button>
+    <button data-p="rVulcan" class="real" disabled>VULCAN V12</button>
     <button data-p="custom" id="customBtn" disabled>CUSTOM</button>
   </div>
 
@@ -502,6 +510,57 @@ const PROFILES = {
     gears: [30, 60, 95, 132, 178, 245],
     sample: true, sampleKey: "mclaren720", lowpass: 6500,
     bass: 8, sub: 0.08, boost: 1.5, scream: 3.5, rasp: 5, raspGain: 0.34, raspFreq: 2200, synth: 0.14, makeup: 2.2,
+  },
+  rLfa: {
+    label: "LEXUS LFA", cylFactor: 5, idleRPM: 1000, maxRPM: 9500,
+    gears: [30, 60, 95, 132, 178, 245],
+    sample: true, sampleKey: "lfa", lowpass: 7500,
+    bass: 7, sub: 0.07, boost: 1.5, scream: 5, rasp: 5, raspGain: 0.36, raspFreq: 2600, synth: 0.14, makeup: 2.2,
+  },
+  rZonda: {
+    label: "ZONDA R", cylFactor: 6, idleRPM: 1000, maxRPM: 8000,
+    gears: [32, 62, 96, 135, 180, 245],
+    sample: true, sampleKey: "zonda", lowpass: 7000,
+    bass: 9, sub: 0.09, boost: 1.5, scream: 4, rasp: 5, raspGain: 0.36, raspFreq: 2300, synth: 0.16, makeup: 2.2,
+  },
+  rVeyron: {
+    label: "VEYRON W16", cylFactor: 8, idleRPM: 900, maxRPM: 6500,
+    gears: [34, 66, 100, 140, 190, 255],
+    sample: true, sampleKey: "veyron", lowpass: 5500,
+    bassFreq: 220,
+    bass: 12, sub: 0.12, boost: 1.55, scream: 2, rasp: 4.5, raspGain: 0.32, raspFreq: 1500, synth: 0.18, makeup: 2.3,
+  },
+  rViper: {
+    label: "VIPER V10", cylFactor: 5, idleRPM: 800, maxRPM: 6400,
+    gears: [28, 54, 86, 122, 165, 225],
+    sample: true, sampleKey: "viper", lowpass: 5500,
+    bassFreq: 220,
+    bass: 12, sub: 0.12, boost: 1.55, scream: 2, rasp: 5, raspGain: 0.35, raspFreq: 1500, synth: 0.18, makeup: 2.3,
+  },
+  rC63: {
+    label: "C63 AMG", cylFactor: 4, idleRPM: 850, maxRPM: 7000,
+    gears: [26, 50, 82, 118, 160, 220],
+    sample: true, sampleKey: "c63", lowpass: 6000,
+    bassFreq: 220,
+    bass: 11, sub: 0.10, boost: 1.55, scream: 2.5, rasp: 5, raspGain: 0.36, raspFreq: 1600, synth: 0.17, makeup: 2.3,
+  },
+  rSupra: {
+    label: "SUPRA 2JZ", cylFactor: 3, idleRPM: 900, maxRPM: 7200,
+    gears: [28, 55, 88, 124, 168, 230],
+    sample: true, sampleKey: "supra", lowpass: 6000,
+    bass: 10, sub: 0.10, boost: 1.5, scream: 3, rasp: 4.5, raspGain: 0.32, raspFreq: 1800, synth: 0.16, makeup: 2.2,
+  },
+  r787b: {
+    label: "MAZDA 787B", cylFactor: 4, idleRPM: 1200, maxRPM: 9000,
+    gears: [30, 60, 95, 132, 178, 245],
+    sample: true, sampleKey: "mazda787b", lowpass: 7500,
+    bass: 7, sub: 0.06, boost: 1.5, scream: 5, rasp: 5, raspGain: 0.38, raspFreq: 2800, synth: 0.12, makeup: 2.2,
+  },
+  rVulcan: {
+    label: "VULCAN V12", cylFactor: 6, idleRPM: 1000, maxRPM: 7800,
+    gears: [32, 62, 96, 135, 180, 245],
+    sample: true, sampleKey: "vulcan", lowpass: 6500,
+    bass: 10, sub: 0.09, boost: 1.5, scream: 3.5, rasp: 5, raspGain: 0.36, raspFreq: 2000, synth: 0.16, makeup: 2.2,
   },
   custom: {
     label: "CUSTOM", cylFactor: 4, idleRPM: 850, maxRPM: 7000,
