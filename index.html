@@ -284,8 +284,9 @@
   </div>
 
   <div class="profiles" id="profiles">
+    <button data-p="ioniq5n" class="active">IONIQ 5 N</button>
     <button data-p="comfort">COMFORT</button>
-    <button data-p="standard" class="active">STANDARD</button>
+    <button data-p="standard">STANDARD</button>
     <button data-p="standardV2">STD V2</button>
     <button data-p="sport">SPORT</button>
     <button data-p="track">TRACK</button>
@@ -453,6 +454,25 @@ const PROFILES = {
     drive: 1.7, amDepth: 0.05, jitter: 3,
     noiseGain: 0.025, noiseMult: 5.5, lowpass: 6800,
     turbo: { gain: 0.05 },   // rising electric whir on top
+  },
+  ioniq5n: {
+    /* Hyundai IONIQ 5 N — "N Active Sound+" (Ignition theme): a turbo-four
+       growl driven by N e-Shift, an 8-speed simulated gearbox so the revs
+       climb and drop with each shift like the real car. Turbo spool whistle
+       on load + throttle-lift pops (ป็อป) round out the signature sound. */
+    label: "IONIQ 5 N", cylFactor: 4, idleRPM: 820, maxRPM: 7600,
+    gears: [20, 40, 65, 95, 130, 170, 215, 260],   // 8-speed N e-Shift
+    harmonics: [
+      { mult: 0.5, wave: "engine",  gain: 0.54, rolloff: 1.5, evenMix: 0.35 },
+      { mult: 1.0, wave: "engine",  gain: 0.46, rolloff: 1.2, evenMix: 0.55 },
+      { mult: 1.5, wave: "engine",  gain: 0.16, rolloff: 1.8, evenMix: 1.0 },
+      { mult: 2.0, wave: "engine",  gain: 0.12, rolloff: 2.0, evenMix: 0.5 },
+      { mult: 4.5, wave: "sine",    gain: 0.07 },   // high-freq lift-off pop
+    ],
+    drive: 3.0, amDepth: 0.24, jitter: 8,
+    noiseGain: 0.14, noiseMult: 2.6, lowpass: 3600,
+    backfire: true,          // decel pops in Sport/N mode
+    turbo: { gain: 0.06 },   // turbo spool whistle that swells with load
   },
   /* ---- real recordings, lazy-loaded from sounds/<key>.js on first use
           (CC0 — archive.org/details/car-engines) ---- */
@@ -691,7 +711,7 @@ class EngineAudio {
   constructor() {
     this.ctx = null;
     this.nodes = null;
-    this.profileKey = "standard";
+    this.profileKey = "ioniq5n";
     this.masterVol = 0.65;
     this.muted = false;
     this.running = false;
