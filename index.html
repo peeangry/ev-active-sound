@@ -139,6 +139,14 @@
     border-color: var(--amber); color: var(--amber);
     animation: loadPulse 0.9s ease-in-out infinite;
   }
+  /* Hyundai N sound modes — performance-blue accent */
+  .profiles button.ion::before { content: "N "; color: #3b82f6; font-weight: 800; font-size: 10px; vertical-align: 1px; }
+  .profiles button.ion.active {
+    background: linear-gradient(180deg, #1e6bd6, #0d4aa0);
+    border-color: #3b82f6; color: #fff;
+    box-shadow: 0 0 18px rgba(59, 130, 246, 0.3);
+  }
+  .profiles button.ion.active::before { color: #cfe0ff; }
   @keyframes loadPulse { 50% { opacity: 0.4; } }
 
   /* ---------- controls ---------- */
@@ -284,8 +292,11 @@
   </div>
 
   <div class="profiles" id="profiles">
+    <button data-p="ionIgnition" class="ion active">5N · IGNITION</button>
+    <button data-p="ionEvolution" class="ion">5N · EVOLUTION</button>
+    <button data-p="ionSupersonic" class="ion">5N · SUPERSONIC</button>
     <button data-p="comfort">COMFORT</button>
-    <button data-p="standard" class="active">STANDARD</button>
+    <button data-p="standard">STANDARD</button>
     <button data-p="standardV2">STD V2</button>
     <button data-p="sport">SPORT</button>
     <button data-p="track">TRACK</button>
@@ -453,6 +464,62 @@ const PROFILES = {
     drive: 1.7, amDepth: 0.05, jitter: 3,
     noiseGain: 0.025, noiseMult: 5.5, lowpass: 6800,
     turbo: { gain: 0.05 },   // rising electric whir on top
+  },
+  /* ================================================================
+     Hyundai IONIQ 5 N — "N Active Sound+" — the three factory sound
+     themes. All three ride on N e-Shift (an 8-speed simulated gearbox,
+     so the revs climb then drop on every shift) and fire a crackling
+     lift-off backfire (ป็อปแบ๊บๆ) when you come off the throttle.
+     ================================================================ */
+  ionIgnition: {
+    /* IGNITION — mimics Hyundai's 2.0T ICE: a turbo-four growl with a
+       spool-up whistle. The most "petrol car" of the three. */
+    label: "IGNITION", cylFactor: 4, idleRPM: 820, maxRPM: 7600,
+    gears: [20, 40, 65, 95, 130, 170, 215, 260],   // 8-speed N e-Shift
+    harmonics: [
+      { mult: 0.5, wave: "engine",  gain: 0.54, rolloff: 1.5, evenMix: 0.35 },
+      { mult: 1.0, wave: "engine",  gain: 0.46, rolloff: 1.2, evenMix: 0.55 },
+      { mult: 1.5, wave: "engine",  gain: 0.16, rolloff: 1.8, evenMix: 1.0 },
+      { mult: 2.0, wave: "engine",  gain: 0.12, rolloff: 2.0, evenMix: 0.5 },
+      { mult: 4.5, wave: "sine",    gain: 0.07 },   // high-freq lift-off pop
+    ],
+    drive: 3.0, amDepth: 0.24, jitter: 8,
+    noiseGain: 0.14, noiseMult: 2.6, lowpass: 3600,
+    backfire: true, backfireGain: 1.0,
+    turbo: { gain: 0.06 },   // turbo spool whistle that swells with load
+  },
+  ionEvolution: {
+    /* EVOLUTION — the "half-EV" voice: a tighter mechanical body with a
+       synthetic electric whir laid over it. Brighter, revs higher. */
+    label: "EVOLUTION", cylFactor: 4, idleRPM: 900, maxRPM: 8200,
+    gears: [22, 44, 70, 100, 138, 180, 225, 270],
+    harmonics: [
+      { mult: 0.5, wave: "engine",   gain: 0.42, rolloff: 1.4, evenMix: 0.30 },
+      { mult: 1.0, wave: "engine",   gain: 0.44, rolloff: 1.1, evenMix: 0.60 },
+      { mult: 2.0, wave: "engine",   gain: 0.20, rolloff: 1.5, evenMix: 0.80 },
+      { mult: 3.0, wave: "triangle", gain: 0.10 },   // electric shimmer
+      { mult: 4.5, wave: "sine",     gain: 0.07 },   // lift-off pop
+    ],
+    drive: 2.6, amDepth: 0.16, jitter: 6,
+    noiseGain: 0.10, noiseMult: 3.4, lowpass: 5200,
+    backfire: true, backfireGain: 0.85,
+    turbo: { wave: "triangle", base: 0.015, gain: 0.05 },
+  },
+  ionSupersonic: {
+    /* SUPERSONIC — fighter-jet theme: a rising twin-spool turbine whine
+       over an airy whoosh. The sci-fi "sounds like a game" mode (★ ในคลิป) */
+    label: "SUPERSONIC", cylFactor: 3, idleRPM: 1200, maxRPM: 9000,
+    gears: [24, 48, 76, 108, 148, 195, 250],
+    harmonics: [
+      { mult: 1.0, wave: "engine",   gain: 0.34, rolloff: 1.2, evenMix: 0.70 },
+      { mult: 2.0, wave: "triangle", gain: 0.18 },
+      { mult: 3.0, wave: "sine",     gain: 0.10 },
+      { mult: 4.5, wave: "sine",     gain: 0.06 },   // lift-off pop
+    ],
+    drive: 2.0, amDepth: 0.08, jitter: 4,
+    noiseGain: 0.16, noiseMult: 4.5, lowpass: 7000,
+    backfire: true, backfireGain: 0.7,
+    turbo: { wave: "triangle", base: 0.05, gain: 0.14 },   // dominant jet whine
   },
   /* ---- real recordings, lazy-loaded from sounds/<key>.js on first use
           (CC0 — archive.org/details/car-engines) ---- */
@@ -691,7 +758,7 @@ class EngineAudio {
   constructor() {
     this.ctx = null;
     this.nodes = null;
-    this.profileKey = "standard";
+    this.profileKey = "ionIgnition";
     this.masterVol = 0.65;
     this.muted = false;
     this.running = false;
@@ -912,11 +979,12 @@ class EngineAudio {
       noise.connect(bp).connect(ng).connect(lowpass);
       noise.start();
 
-      // turbocharger whine — bypasses the lowpass so it stays crisp
+      // turbo / turbine whine — bypasses the lowpass so it stays crisp.
+      // SUPERSONIC drives this hard (triangle wave) for the fighter-jet spool.
       let turbo = null;
       if (p.turbo) {
         const tOsc = ctx.createOscillator();
-        tOsc.type = "sine";
+        tOsc.type = p.turbo.wave || "sine";
         tOsc.frequency.value = 2000;
         const tG = ctx.createGain();
         tG.gain.value = 0;
@@ -925,7 +993,8 @@ class EngineAudio {
         turbo = { osc: tOsc, g: tG };
       }
 
-      this.nodes = { master, lowpass, oscs, lfo, bp, turbo };
+      // keep the noise gain so backfire can crackle it (broadband ป็อป)
+      this.nodes = { master, lowpass, oscs, lfo, bp, turbo, noiseG: ng };
 
       // slight random detune — real engines never spin perfectly
       this.jitterTimer = setInterval(() => {
@@ -1012,39 +1081,51 @@ class EngineAudio {
     } else {
       const firing = (rpm / 60) * p.cylFactor;
       // backfire detector: load decays smoothly, so compare against a slowly
-      // decaying peak — a real "throttle lift" is peak high + load now low
+      // decaying peak — a real "throttle lift" is peak high + load now low.
+      // Loosened thresholds + shorter cooldown so every lift crackles (ป็อป).
       let pop = false;
       if (p.backfire) {
         this.loadPeak = Math.max(load, (this.loadPeak || 0) * 0.985);
-        if (this.loadPeak > 0.5 && load < 0.15 && t - (this.lastPopT || 0) > 1.2) {
+        if (this.loadPeak > 0.4 && load < 0.18 && t - (this.lastPopT || 0) > 0.8) {
           pop = true;
           this.lastPopT = t;
           this.loadPeak = 0;
         }
       }
+      const bfG = p.backfireGain != null ? p.backfireGain : 1;
       for (const o of this.nodes.oscs) {
         o.osc.frequency.setTargetAtTime(firing * o.mult, t, 0.05);
-        // fire a decaying burst of pops (ตดปุ้งๆ) through the shaper
+        // tonal crackle burst (แบ๊บๆ) through the shaper on the 4.5x osc
         if (pop && o.mult === 4.5 && o.g) {
-          const bg = o.g.gain;
-          const base = 0.08;
+          const bg = o.g.gain, base = 0.08;
           bg.cancelScheduledValues(t);
-          bg.setValueAtTime(0.9, t);                    // ปุ้ง!
-          bg.setTargetAtTime(base, t + 0.02, 0.03);
-          bg.setValueAtTime(0.65, t + 0.11);            // ปุ้ง
-          bg.setTargetAtTime(base, t + 0.13, 0.03);
-          bg.setValueAtTime(0.45, t + 0.23);            // ปุ้ง...
-          bg.setTargetAtTime(base, t + 0.25, 0.05);
+          const hits = [[0, 1.0], [0.08, 0.8], [0.16, 0.62], [0.25, 0.5], [0.34, 0.36]];
+          for (const [dt, lv] of hits) {
+            bg.setValueAtTime(base + (lv * bfG), t + dt);
+            bg.setTargetAtTime(base, t + dt + 0.015, 0.03);
+          }
+        }
+      }
+      // broadband noise crackle layered under the tonal pops = real backfire snap
+      if (pop && this.nodes.noiseG) {
+        const ng = this.nodes.noiseG.gain, nb = p.noiseGain;
+        ng.cancelScheduledValues(t);
+        const hits = [[0, 4.5], [0.08, 3.2], [0.16, 2.4], [0.25, 1.8], [0.34, 1.4]];
+        for (const [dt, mul] of hits) {
+          ng.setValueAtTime(nb * (1 + (mul - 1) * bfG), t + dt);
+          ng.setTargetAtTime(nb, t + dt + 0.02, 0.035);
         }
       }
       this.nodes.lfo.frequency.setTargetAtTime(rpm / 60, t, 0.1);
       this.nodes.bp.frequency.setTargetAtTime(
         Math.min(firing * p.noiseMult, 9000), t, 0.06);
       if (this.nodes.turbo) {
-        // whine pitch follows rpm, volume spools up with load (slight lag)
+        // whine pitch follows rpm, volume spools up with load (slight lag);
+        // `base` keeps an idle turbine floor going for SUPERSONIC's jet whine
         this.nodes.turbo.osc.frequency.setTargetAtTime(
           Math.min(1200 + rpm * 0.85, 9500), t, 0.15);
-        this.nodes.turbo.g.gain.setTargetAtTime(load * p.turbo.gain, t, 0.25);
+        const tBase = p.turbo.base || 0;
+        this.nodes.turbo.g.gain.setTargetAtTime(tBase + load * p.turbo.gain, t, 0.25);
       }
     }
     this.lastLoad = load;
