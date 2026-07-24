@@ -485,7 +485,7 @@ const PROFILES = {
     ],
     drive: 3.0, amDepth: 0.24, jitter: 8,
     noiseGain: 0.14, noiseMult: 2.6, lowpass: 3600,
-    backfire: true, backfireGain: 1.0,
+    backfire: true, backfireGain: 1.5,
     turbo: { gain: 0.06 },   // turbo spool whistle that swells with load
   },
   ionEvolution: {
@@ -502,7 +502,7 @@ const PROFILES = {
     ],
     drive: 2.6, amDepth: 0.16, jitter: 6,
     noiseGain: 0.10, noiseMult: 3.4, lowpass: 5200,
-    backfire: true, backfireGain: 0.85,
+    backfire: true, backfireGain: 1.3,
     turbo: { wave: "triangle", base: 0.015, gain: 0.05 },
   },
   ionSupersonic: {
@@ -518,7 +518,7 @@ const PROFILES = {
     ],
     drive: 2.0, amDepth: 0.08, jitter: 4,
     noiseGain: 0.16, noiseMult: 4.5, lowpass: 7000,
-    backfire: true, backfireGain: 0.7,
+    backfire: true, backfireGain: 1.15,
     turbo: { wave: "triangle", base: 0.05, gain: 0.14 },   // dominant jet whine
   },
   /* ---- real recordings, lazy-loaded from sounds/<key>.js on first use
@@ -783,6 +783,12 @@ class EngineAudio {
     };
     const p = this.profile;
 
+    // backfire timing is in AudioContext time, but each start() spins up a
+    // fresh context (currentTime resets to ~0). Clear the state so a stale
+    // lastPopT from the previous context can't block the first lift-off pop.
+    this.lastPopT = 0;
+    this.loadPeak = 0;
+
     const master = ctx.createGain();
     master.gain.value = 0;
     const analyser = ctx.createAnalyser();
@@ -993,8 +999,37 @@ class EngineAudio {
         turbo = { osc: tOsc, g: tG };
       }
 
-      // keep the noise gain so backfire can crackle it (broadband ป็อป)
-      this.nodes = { master, lowpass, oscs, lfo, bp, turbo, noiseG: ng };
+      // dedicated firecracker backfire (ปังๆๆๆ) — loud broadband noise bangs
+      // + a low boom, on their OWN bus into the EQ/limiter so they stay loud
+      // even when you lift off (master gain drops with load, this doesn't)
+      let backfire = null;
+      if (p.backfire) {
+        const bfBus = ctx.createGain();
+        bfBus.gain.value = 0;                       // = volume, set in update()
+        bfBus.connect(this.eqFilters[0] || limiter);
+
+        // sharp broadband crack — white noise gated hard = a bang, not a tone
+        const bfBP = ctx.createBiquadFilter();
+        bfBP.type = "bandpass";
+        bfBP.frequency.value = 1500;
+        bfBP.Q.value = 0.4;                         // wide = snappy crack
+        const bfCrack = ctx.createGain();
+        bfCrack.gain.value = 0;
+        noise.connect(bfBP).connect(bfCrack).connect(bfBus);
+
+        // low boom body — the chest-thump of the ปัง
+        const bfBoom = ctx.createOscillator();
+        bfBoom.type = "triangle";
+        bfBoom.frequency.value = 90;
+        const bfBoomG = ctx.createGain();
+        bfBoomG.gain.value = 0;
+        bfBoom.connect(bfBoomG).connect(bfBus);
+        bfBoom.start();
+
+        backfire = { bus: bfBus, crack: bfCrack, boom: bfBoom, boomG: bfBoomG };
+      }
+
+      this.nodes = { master, lowpass, oscs, lfo, bp, turbo, backfire };
 
       // slight random detune — real engines never spin perfectly
       this.jitterTimer = setInterval(() => {
@@ -1043,6 +1078,36 @@ class EngineAudio {
 
   setVolume(v) { this.masterVol = v; }
   setMuted(m) { this.muted = m; }
+
+  /* Fire a burst of loud firecracker bangs (ปังๆๆๆ): each bang = an
+     instant-attack broadband noise crack + a low boom thump, 4–6 of them
+     with randomized spacing/level so it reads like real exhaust crackle.
+     Peaks ride into the brickwall limiter, so it's loud but never clips. */
+  fireBackfire(t, g) {
+    const bf = this.nodes.backfire;
+    if (!bf) return;
+    const crack = bf.crack.gain, boom = bf.boomG.gain, bfreq = bf.boom.frequency;
+    crack.cancelScheduledValues(t);
+    boom.cancelScheduledValues(t);
+    bfreq.cancelScheduledValues(t);
+    let dt = 0;
+    const n = 4 + Math.floor(Math.random() * 3);   // 4–6 bangs
+    for (let i = 0; i < n; i++) {
+      const decay = i === 0 ? 1.0 : Math.max(0.9 - i * 0.13, 0.3);
+      const lv = decay * g;
+      const bt = t + dt;
+      // crack: near-instant attack, very fast decay = sharp "ปัง"
+      crack.setValueAtTime(0.0001, bt);
+      crack.linearRampToValueAtTime(1.7 * lv, bt + 0.002);
+      crack.setTargetAtTime(0.0001, bt + 0.004, 0.022);
+      // boom: low thump, pitch varies a touch each bang
+      bfreq.setValueAtTime(70 + Math.random() * 55, bt);
+      boom.setValueAtTime(0.0001, bt);
+      boom.linearRampToValueAtTime(1.2 * lv, bt + 0.003);
+      boom.setTargetAtTime(0.0001, bt + 0.012, 0.045);
+      dt += 0.055 + Math.random() * 0.07;          // 55–125 ms apart
+    }
+  }
 
   update(rpm, load) {
     if (!this.running || !this.nodes) return;
@@ -1095,26 +1160,13 @@ class EngineAudio {
       const bfG = p.backfireGain != null ? p.backfireGain : 1;
       for (const o of this.nodes.oscs) {
         o.osc.frequency.setTargetAtTime(firing * o.mult, t, 0.05);
-        // tonal crackle burst (แบ๊บๆ) through the shaper on the 4.5x osc
-        if (pop && o.mult === 4.5 && o.g) {
-          const bg = o.g.gain, base = 0.08;
-          bg.cancelScheduledValues(t);
-          const hits = [[0, 1.0], [0.08, 0.8], [0.16, 0.62], [0.25, 0.5], [0.34, 0.36]];
-          for (const [dt, lv] of hits) {
-            bg.setValueAtTime(base + (lv * bfG), t + dt);
-            bg.setTargetAtTime(base, t + dt + 0.015, 0.03);
-          }
-        }
       }
-      // broadband noise crackle layered under the tonal pops = real backfire snap
-      if (pop && this.nodes.noiseG) {
-        const ng = this.nodes.noiseG.gain, nb = p.noiseGain;
-        ng.cancelScheduledValues(t);
-        const hits = [[0, 4.5], [0.08, 3.2], [0.16, 2.4], [0.25, 1.8], [0.34, 1.4]];
-        for (const [dt, mul] of hits) {
-          ng.setValueAtTime(nb * (1 + (mul - 1) * bfG), t + dt);
-          ng.setTargetAtTime(nb, t + dt + 0.02, 0.035);
-        }
+      // hold the backfire bus at current volume (loud regardless of load) and
+      // fire a firecracker burst on throttle-lift
+      if (this.nodes.backfire) {
+        this.nodes.backfire.bus.gain.setTargetAtTime(
+          this.muted ? 0 : this.masterVol, t, 0.05);
+        if (pop) this.fireBackfire(t, bfG);
       }
       this.nodes.lfo.frequency.setTargetAtTime(rpm / 60, t, 0.1);
       this.nodes.bp.frequency.setTargetAtTime(
