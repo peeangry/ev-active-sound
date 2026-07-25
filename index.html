@@ -743,8 +743,18 @@ function autoTune(buf, cylFactor = 4) {
   return { baseRpm, loopStart, loopEnd, fundamentalHz };
 }
 
-/* ---- user equalizer state (popup) — survives engine restarts ---- */
-const EQ_CUT_DB = -40;   // "band off" = bury it
+/* ---- user equalizer state (popup) — survives engine restarts ----
+   "Band off" must stay surgical. A -40 dB peaking cut at Q 0.9 has skirts
+   ~2 octaves wide, so switching off 1 k alone also buried 400 Hz (-15 dB)
+   and 3 kHz (-13 dB); switching off 1 k + 2.5 k + 6 k stacked to -40..-55 dB
+   across everything above 800 Hz and the engine all but vanished. Cutting
+   less deep AND narrowing Q while a band is off keeps the cut on its own
+   band: 1 k off now costs its neighbours only 2-3 dB. */
+const EQ_CUT_PEAK_DB = -24;    // peaking bands: deep enough to read as "off"
+const EQ_CUT_SHELF_DB = -18;   // shelves cover an open-ended range — gentler
+const EQ_Q_ON = 0.9;           // musical width while boosting/cutting
+const EQ_Q_OFF = 2.0;          // narrow so an off band doesn't drag neighbours
+const eqCutDb = b => (b.type === "peaking" ? EQ_CUT_PEAK_DB : EQ_CUT_SHELF_DB);
 const EQ_BANDS = [
   { f: 60,   label: "60 Hz",   type: "lowshelf",  gain: 0, on: true },
   { f: 150,  label: "150 Hz",  type: "peaking",   gain: 0, on: true },
@@ -765,6 +775,7 @@ class EngineAudio {
     this.customBuffer = null;
     this.customBaseRpm = 2500;
     this.jitterTimer = null;
+    this.restartTimer = null;   // pending profile-switch rebuild
     this.analyser = null;
     this.lastLoad = 0;  // for backfire decel detection
   }
@@ -813,8 +824,8 @@ class EngineAudio {
       const f = ctx.createBiquadFilter();
       f.type = b.type;
       f.frequency.value = b.f;
-      if (b.type === "peaking") f.Q.value = 0.9;
-      f.gain.value = b.on ? b.gain : EQ_CUT_DB;
+      if (b.type === "peaking") f.Q.value = b.on ? EQ_Q_ON : EQ_Q_OFF;
+      f.gain.value = b.on ? b.gain : eqCutDb(b);
       return f;
     });
     let eqTail = master;
@@ -1048,10 +1059,18 @@ class EngineAudio {
     // push current EQ_BANDS[i] state into the live filter (if running)
     if (!this.running || !this.eqFilters) return;
     const b = EQ_BANDS[i], f = this.eqFilters[i], t = this.ctx.currentTime;
-    f.gain.setTargetAtTime(b.on ? b.gain : EQ_CUT_DB, t, 0.03);
+    f.gain.setTargetAtTime(b.on ? b.gain : eqCutDb(b), t, 0.03);
+    // narrow the notch while the band is off so it stays off its neighbours
+    if (b.type === "peaking") f.Q.setTargetAtTime(b.on ? EQ_Q_ON : EQ_Q_OFF, t, 0.03);
   }
 
   stop() {
+    // Cancel a pending profile-switch restart FIRST. setProfile() tears the
+    // engine down and re-starts it 190 ms later; without this, pressing STOP
+    // inside that window hit the `!this.running` early-return, left the timer
+    // armed, and the engine came back to life with the UI showing START.
+    clearTimeout(this.restartTimer);
+    this.restartTimer = null;
     if (!this.running) return;
     clearInterval(this.jitterTimer);
     this.jitterTimer = null;
@@ -1068,11 +1087,16 @@ class EngineAudio {
 
   setProfile(key) {
     this.profileKey = key;
-    if (this.running) {
+    // `restartTimer` keeps rapid profile taps working: the engine is already
+    // down mid-switch, so `running` alone would skip the rebuild entirely
+    if (this.running || this.restartTimer) {
       // fade-out + rebuild; master ramps back in via update() so the
       // switch reads as a quick crossfade rather than a dropout
-      this.stop();
-      setTimeout(() => { if (!this.running) this.start(); }, 190);
+      this.stop();   // also clears any restart still pending
+      this.restartTimer = setTimeout(() => {
+        this.restartTimer = null;
+        if (!this.running) this.start();
+      }, 190);
     }
   }
 
@@ -1126,8 +1150,11 @@ class EngineAudio {
       this.nodes.sample.playbackRate.setTargetAtTime(rate, t, 0.08);
       const firing = (rpm / 60) * (p.cylFactor || 4);
       if (this.nodes.sub) {
-        // half-order sub-octave rumble tracking the firing frequency
-        const subHz = Math.min(Math.max(firing * 0.5, 25), 130);
+        // half-order sub-octave rumble tracking the firing frequency.
+        // Floor sits above the 28 Hz sub-sonic guard: this oscillator runs
+        // straight into master, so anything lower would skip that filter and
+        // reach the car's subwoofer as inaudible cone travel.
+        const subHz = Math.min(Math.max(firing * 0.5, 30), 130);
         this.nodes.sub.osc.frequency.setTargetAtTime(subHz, t, 0.08);
         const subLevel = p.sub != null ? p.sub : 0.28;
         this.nodes.sub.g.gain.setTargetAtTime(subLevel * (0.5 + 0.5 * load), t, 0.12);
@@ -1383,10 +1410,13 @@ function drawEq() {
   ctx2.clearRect(0, 0, w, h);
   const bars = 40, gap = w * 0.004;
   const bw = w / bars - gap;
+  // pull the FFT once per frame — this used to sit inside the bar loop and
+  // ran 40 copies of the spectrum every frame for no benefit
+  const live = !!engine.analyser;
+  if (live) engine.analyser.getByteFrequencyData(freqData);
   for (let i = 0; i < bars; i++) {
     let v = 0.03;
-    if (engine.analyser) {
-      engine.analyser.getByteFrequencyData(freqData);
+    if (live) {
       // log-ish bin mapping so low freqs don't hog every bar
       const idx = Math.floor(Math.pow(i / bars, 1.7) * 380);
       v = Math.max(freqData[idx] / 255, 0.03);
@@ -1468,9 +1498,16 @@ loop();   // visuals run even before the engine starts
 /* keep the screen awake while the engine runs (dashboards / phones) */
 let wakeLock = null;
 function acquireWakeLock() {
-  if (!("wakeLock" in navigator)) return;
+  // bail if one is already held — visibilitychange fires on every return to
+  // the app and would otherwise stack up sentinels we can never release
+  if (!("wakeLock" in navigator) || wakeLock) return;
   navigator.wakeLock.request("screen")
-    .then(wl => { wakeLock = wl; })
+    .then(wl => {
+      wakeLock = wl;
+      // the system drops the lock on its own when the screen sleeps; clearing
+      // the handle lets the next visibilitychange re-acquire it
+      wl.addEventListener("release", () => { wakeLock = null; });
+    })
     .catch(() => {});
 }
 function releaseWakeLock() {
