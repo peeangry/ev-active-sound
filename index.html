@@ -1496,21 +1496,27 @@ loop();   // visuals run even before the engine starts
    UI wiring
    ================================================================ */
 /* keep the screen awake while the engine runs (dashboards / phones) */
-let wakeLock = null;
+let wakeLock = null, wakeLockPending = false;
 function acquireWakeLock() {
-  // bail if one is already held — visibilitychange fires on every return to
-  // the app and would otherwise stack up sentinels we can never release
-  if (!("wakeLock" in navigator) || wakeLock) return;
+  // bail if one is held or a request is already in flight — visibilitychange
+  // fires on every return to the app and would otherwise stack up sentinels
+  if (!("wakeLock" in navigator) || wakeLock || wakeLockPending) return;
+  wakeLockPending = true;
   navigator.wakeLock.request("screen")
     .then(wl => {
+      wakeLockPending = false;
+      // STOP may have fired while the request was in flight — honour it,
+      // otherwise the screen would stay awake after the engine is off
+      if (!started) { wl.release().catch(() => {}); return; }
       wakeLock = wl;
       // the system drops the lock on its own when the screen sleeps; clearing
       // the handle lets the next visibilitychange re-acquire it
       wl.addEventListener("release", () => { wakeLock = null; });
     })
-    .catch(() => {});
+    .catch(() => { wakeLockPending = false; });
 }
 function releaseWakeLock() {
+  wakeLockPending = false;   // cancel intent for any in-flight request
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 }
 document.addEventListener("visibilitychange", () => {
