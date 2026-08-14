@@ -34,11 +34,12 @@
     touch-action: manipulation;      /* kill double-tap zoom on car screens */
     overscroll-behavior: none;       /* no rubber-band bounce while dragging sliders */
   }
-  /* bottom padding leaves clearance for the floating MUSIC MODE button */
-  .app { width: 100%; max-width: 1150px; display: flex; flex-direction: column; gap: 12px; padding-bottom: 68px; }
+  .app { width: 100%; max-width: 1150px; display: flex; flex-direction: column; gap: 12px; }
 
   /* ---------- header ---------- */
-  header { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px; }
+  /* GPS badge sits next to the logo on the left; the top-right corner is left
+     free for the floating MUSIC MODE button (padding-right reserves its space) */
+  header { display: flex; align-items: center; justify-content: flex-start; gap: 14px; flex-wrap: wrap; padding: 2px 4px; padding-right: 150px; }
   .logo { font-size: 17px; font-weight: 700; letter-spacing: 4px; }
   .logo b { color: var(--cyan); font-weight: 700; }
   .badge {
@@ -222,7 +223,7 @@
 
   /* ---------- floating MUSIC MODE button ---------- */
   #musicBtn {
-    position: fixed; left: 14px; bottom: 14px; z-index: 45;
+    position: fixed; right: 14px; top: 14px; z-index: 45;
     display: flex; align-items: center; gap: 7px;
     padding: 13px 18px; font-size: 13px; font-weight: 700; letter-spacing: 1px;
     color: var(--text); background: linear-gradient(180deg, var(--panel2), var(--panel));
@@ -384,7 +385,7 @@
 
 </div>
 
-<!-- floating MUSIC MODE button (bottom-left) — ducks the engine so phone
+<!-- floating MUSIC MODE button (top-right) — ducks the engine so phone
      music over the car's Bluetooth sits clearly on top; tap again to restore -->
 <button id="musicBtn" title="หรี่เสียงเครื่องให้เพลงเด่น">🎵 <span id="musicBtnLabel">MUSIC MODE</span></button>
 
