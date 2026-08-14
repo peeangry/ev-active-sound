@@ -34,7 +34,8 @@
     touch-action: manipulation;      /* kill double-tap zoom on car screens */
     overscroll-behavior: none;       /* no rubber-band bounce while dragging sliders */
   }
-  .app { width: 100%; max-width: 1150px; display: flex; flex-direction: column; gap: 12px; }
+  /* bottom padding leaves clearance for the floating MUSIC MODE button */
+  .app { width: 100%; max-width: 1150px; display: flex; flex-direction: column; gap: 12px; padding-bottom: 68px; }
 
   /* ---------- header ---------- */
   header { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px; }
@@ -218,6 +219,22 @@
   .eq-band.off .f, .eq-band.off .db { color: var(--dim); opacity: 0.5; }
   .eq-band.off input[type=range] { opacity: 0.35; }
   .eq-note { margin-top: 10px; font-size: 11px; color: var(--dim); }
+
+  /* ---------- floating MUSIC MODE button ---------- */
+  #musicBtn {
+    position: fixed; left: 14px; bottom: 14px; z-index: 45;
+    display: flex; align-items: center; gap: 7px;
+    padding: 13px 18px; font-size: 13px; font-weight: 700; letter-spacing: 1px;
+    color: var(--text); background: linear-gradient(180deg, var(--panel2), var(--panel));
+    border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  }
+  #musicBtn.on {
+    background: linear-gradient(180deg, #16a34a, #15803d);
+    border-color: #22c55e; color: #fff;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.35);
+  }
+  @media (max-width: 760px) { #musicBtn { padding: 12px 15px; font-size: 12px; } }
 </style>
 </head>
 <body>
@@ -366,6 +383,10 @@
   </div>
 
 </div>
+
+<!-- floating MUSIC MODE button (bottom-left) — ducks the engine so phone
+     music over the car's Bluetooth sits clearly on top; tap again to restore -->
+<button id="musicBtn" title="หรี่เสียงเครื่องให้เพลงเด่น">🎵 <span id="musicBtnLabel">MUSIC MODE</span></button>
 
 <script>
 "use strict";
@@ -770,6 +791,7 @@ class EngineAudio {
     this.nodes = null;
     this.profileKey = "ionIgnition";
     this.masterVol = 0.65;
+    this.duck = 1;        // MUSIC MODE ducks the engine so phone music sits on top
     this.muted = false;
     this.running = false;
     this.customBuffer = null;
@@ -1102,6 +1124,7 @@ class EngineAudio {
 
   setVolume(v) { this.masterVol = v; }
   setMuted(m) { this.muted = m; }
+  setDuck(d) { this.duck = d; }   // 1 = normal, <1 = ducked for MUSIC MODE
 
   /* Fire a burst of loud firecracker bangs (ปังๆๆๆ): each bang = an
      instant-attack broadband noise crack + a low boom thump, 4–6 of them
@@ -1139,7 +1162,7 @@ class EngineAudio {
     const p = this.profile;
 
     const makeup = this.nodes.sample ? (p.makeup || 1) : 1;
-    const vol = this.muted ? 0 : this.masterVol * 0.5 * (0.35 + 0.65 * load) * makeup;
+    const vol = this.muted ? 0 : this.masterVol * this.duck * 0.5 * (0.35 + 0.65 * load) * makeup;
     this.nodes.master.gain.setTargetAtTime(vol, t, 0.1);
     this.nodes.lowpass.frequency.setTargetAtTime(
       p.lowpass * (0.55 + 0.9 * load), t, 0.15);
@@ -1192,7 +1215,7 @@ class EngineAudio {
       // fire a firecracker burst on throttle-lift
       if (this.nodes.backfire) {
         this.nodes.backfire.bus.gain.setTargetAtTime(
-          this.muted ? 0 : this.masterVol, t, 0.05);
+          this.muted ? 0 : this.masterVol * this.duck, t, 0.05);
         if (pop) this.fireBackfire(t, bfG);
       }
       this.nodes.lfo.frequency.setTargetAtTime(rpm / 60, t, 0.1);
@@ -1482,7 +1505,7 @@ function loop(now) {
   $("accVal").innerHTML = (accelSmooth >= 0 ? "+" : "") + accelSmooth.toFixed(2) + "<small> km/h/s</small>";
   $("tempBar").style.width = Math.min((motorTemp - 30) / 60 * 100, 100) + "%";
   $("tempVal").innerHTML = Math.round(motorTemp) + "<small> °C</small>";
-  const out = engine.running && !engine.muted ? Math.round(engine.masterVol * (35 + 65 * load)) : 0;
+  const out = engine.running && !engine.muted ? Math.round(engine.masterVol * engine.duck * (35 + 65 * load)) : 0;
   $("outBar").style.width = out + "%";
   $("outVal").innerHTML = out + "<small> %</small>";
 
@@ -1559,6 +1582,21 @@ $("muteBtn").addEventListener("click", () => {
 });
 
 $("volume").addEventListener("input", e => engine.setVolume(e.target.value / 100));
+
+/* ---- MUSIC MODE: one-tap duck so phone music (car Bluetooth) sits on top.
+   Pairs the phone to the car for the music itself — a web page can't do that;
+   this just drops the engine to ~30% and back so the two balance nicely. ---- */
+const MUSIC_DUCK = 0.3;
+let musicMode = false;
+$("musicBtn").addEventListener("click", () => {
+  musicMode = !musicMode;
+  engine.setDuck(musicMode ? MUSIC_DUCK : 1);
+  $("musicBtn").classList.toggle("on", musicMode);
+  $("musicBtnLabel").textContent = musicMode ? "เพลงเด่น" : "MUSIC MODE";
+  $("statusText").textContent = musicMode
+    ? "MUSIC MODE — หรี่เสียงเครื่องให้เพลงจากมือถือ (Bluetooth รถ) เด่นขึ้น • กดอีกครั้งเพื่อกลับ"
+    : "กลับสู่ระดับเสียงเครื่องปกติแล้ว";
+});
 
 /* ---- equalizer popup ---- */
 (function buildEq() {
