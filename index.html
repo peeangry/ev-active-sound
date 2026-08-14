@@ -416,7 +416,7 @@ const PROFILES = {
       { mult: 1.5, wave: "engine",  gain: 0.14, rolloff: 1.8, evenMix: 1.0 },
       { mult: 2.0, wave: "engine",  gain: 0.10, rolloff: 2.0, evenMix: 0.5 },
     ],
-    drive: 2.6, amDepth: 0.28, jitter: 9,
+    drive: 2.6, amDepth: 0.18, jitter: 9,
     noiseGain: 0.16, noiseMult: 2.4, lowpass: 2400,
   },
   standardV2: {
@@ -430,7 +430,7 @@ const PROFILES = {
       { mult: 2.0, wave: "engine",  gain: 0.14, rolloff: 2.0, evenMix: 0.5 },
       { mult: 4.5, wave: "sine",    gain: 0.08 },  // high-freq backfire pop on decel
     ],
-    drive: 3.2, amDepth: 0.28, jitter: 9,
+    drive: 3.2, amDepth: 0.18, jitter: 9,
     noiseGain: 0.18, noiseMult: 2.4, lowpass: 2400,
     backfire: true,  // flag for decel pop synthesis
   },
@@ -497,7 +497,7 @@ const PROFILES = {
     /* IGNITION — mimics Hyundai's 2.0T ICE: a turbo-four growl with a
        spool-up whistle. The most "petrol car" of the three. */
     label: "IGNITION", cylFactor: 4, idleRPM: 820, maxRPM: 7600,
-    gears: [20, 40, 65, 95, 130, 170, 215, 260],   // 8-speed N e-Shift
+    gears: [14, 28, 44, 62, 82, 105, 130, 158],   // 8-speed N e-Shift (tight = frequent shifts at low speed)
     harmonics: [
       { mult: 0.5, wave: "engine",  gain: 0.54, rolloff: 1.5, evenMix: 0.35 },
       { mult: 1.0, wave: "engine",  gain: 0.46, rolloff: 1.2, evenMix: 0.55 },
@@ -505,7 +505,7 @@ const PROFILES = {
       { mult: 2.0, wave: "engine",  gain: 0.12, rolloff: 2.0, evenMix: 0.5 },
       { mult: 4.5, wave: "sine",    gain: 0.07 },   // high-freq lift-off pop
     ],
-    drive: 3.0, amDepth: 0.24, jitter: 8,
+    drive: 3.0, amDepth: 0.10, jitter: 8,
     noiseGain: 0.14, noiseMult: 2.6, lowpass: 3600,
     backfire: true, backfireGain: 1.5,
     turbo: { gain: 0.06 },   // turbo spool whistle that swells with load
@@ -514,7 +514,7 @@ const PROFILES = {
     /* EVOLUTION — the "half-EV" voice: a tighter mechanical body with a
        synthetic electric whir laid over it. Brighter, revs higher. */
     label: "EVOLUTION", cylFactor: 4, idleRPM: 900, maxRPM: 8200,
-    gears: [22, 44, 70, 100, 138, 180, 225, 270],
+    gears: [15, 30, 47, 66, 88, 112, 138, 166],
     harmonics: [
       { mult: 0.5, wave: "engine",   gain: 0.42, rolloff: 1.4, evenMix: 0.30 },
       { mult: 1.0, wave: "engine",   gain: 0.44, rolloff: 1.1, evenMix: 0.60 },
@@ -531,7 +531,7 @@ const PROFILES = {
     /* SUPERSONIC — fighter-jet theme: a rising twin-spool turbine whine
        over an airy whoosh. The sci-fi "sounds like a game" mode (★ ในคลิป) */
     label: "SUPERSONIC", cylFactor: 3, idleRPM: 1200, maxRPM: 9000,
-    gears: [24, 48, 76, 108, 148, 195, 250],
+    gears: [16, 33, 52, 74, 100, 130, 165],
     harmonics: [
       { mult: 1.0, wave: "engine",   gain: 0.34, rolloff: 1.2, evenMix: 0.70 },
       { mult: 2.0, wave: "triangle", gain: 0.18 },
@@ -1157,7 +1157,7 @@ class EngineAudio {
     }
   }
 
-  update(rpm, load) {
+  update(rpm, load, accel = 0) {
     if (!this.running || !this.nodes) return;
     const t = this.ctx.currentTime;
     const p = this.profile;
@@ -1202,7 +1202,13 @@ class EngineAudio {
       let pop = false;
       if (p.backfire) {
         this.loadPeak = Math.max(load, (this.loadPeak || 0) * 0.985);
-        if (this.loadPeak > 0.4 && load < 0.18 && t - (this.lastPopT || 0) > 0.8) {
+        // Fire only on a genuine throttle lift = the SMOOTHED deceleration is
+        // clearly negative after we'd been on the power (loadPeak high). The
+        // old test (load < 0.18) keyed off the per-frame load, whose derivative
+        // noise stays "low" at a constant cruise too, so it machine-gunned pops
+        // into a repeating thump/"echo". accelSmooth sits at ~0 when cruising
+        // and only goes negative on a real lift, so cruising is now silent.
+        if (this.loadPeak > 0.4 && accel < -1.0 && t - (this.lastPopT || 0) > 0.8) {
           pop = true;
           this.lastPopT = t;
           this.loadPeak = 0;
@@ -1219,7 +1225,11 @@ class EngineAudio {
           this.muted ? 0 : this.masterVol * this.duck, t, 0.05);
         if (pop) this.fireBackfire(t, bfG);
       }
-      this.nodes.lfo.frequency.setTargetAtTime(rpm / 60, t, 0.1);
+      // Engine "lope" tremolo. It used to track rpm/60 directly, which at
+      // speed becomes a 100+ Hz tremolo whose sidebands beat against the
+      // harmonics into an audible slow wobble (the "echo"/สะท้อน). Keep it in
+      // a low throb band so it reads as engine character, not modulation.
+      this.nodes.lfo.frequency.setTargetAtTime(Math.min(2.5 + rpm / 700, 9), t, 0.1);
       this.nodes.bp.frequency.setTargetAtTime(
         Math.min(firing * p.noiseMult, 9000), t, 0.06);
       if (this.nodes.turbo) {
@@ -1474,7 +1484,7 @@ function physicsStep(dt) {
   motorTemp += (tempTarget - motorTemp) * (1 - Math.exp(-dt / 14));
 
   const { rpm, gear } = speedToRpmGear(smoothSpeed, engine.profile);
-  engine.update(rpm, load);
+  engine.update(rpm, load, accelSmooth);
   return { rpm, gear, load, loadDisp };
 }
 
