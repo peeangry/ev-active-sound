@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Tesla Second Screen</title>
+<style>
+  :root {
+    --bg: #06090f;
+    --panel: #0c121c;
+    --panel2: #111a27;
+    --line: #1b2636;
+    --text: #dfe7f2;
+    --dim: #5f7188;
+    --cyan: #35d6ff;
+    --cyan-dim: #1a5f75;
+    --red: #ff4652;
+    --ok: #2fe08a;
+    --amber: #ffc44d;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, #0e1a2a 0%, transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    overscroll-behavior: none;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 4px 2px; }
+  .logo { font-size: 16px; font-weight: 700; letter-spacing: 3px; }
+  .logo b { color: var(--cyan); }
+  .spacer { flex: 1; }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel2), var(--panel));
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .card h2 { font-size: 13px; letter-spacing: 3px; color: var(--dim); font-weight: 600; margin-bottom: 12px; }
+
+  button {
+    font-family: inherit; font-size: 13px; letter-spacing: 1px; font-weight: 600;
+    color: var(--text); background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 11px 16px; cursor: pointer;
+  }
+  button:hover { border-color: var(--cyan-dim); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: linear-gradient(180deg, #123b4c, #0d2634); border-color: var(--cyan-dim); color: var(--cyan); }
+  button.danger { color: var(--red); border-color: #4a1b21; }
+
+  .choice { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 620px) { .choice { grid-template-columns: 1fr; } }
+  .choice button { padding: 22px 16px; text-align: left; line-height: 1.5; font-size: 15px; }
+  .choice button span { display: block; font-size: 12px; font-weight: 400; color: var(--dim); letter-spacing: 0; margin-top: 6px; }
+
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  label.fld { display: flex; flex-direction: column; gap: 6px; font-size: 11px; letter-spacing: 2px; color: var(--dim); }
+  select, input[type=text], input[type=password] {
+    font-family: inherit; font-size: 14px; color: var(--text);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px;
+  }
+  input[type=range] { width: 100%; accent-color: var(--cyan); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+
+  .code-in {
+    font-size: 30px; letter-spacing: 12px; text-align: center; font-weight: 700;
+    width: 220px; padding: 12px 8px 12px 20px; color: var(--cyan);
+  }
+
+  .status { font-size: 12px; letter-spacing: 1px; color: var(--dim); display: flex; align-items: center; gap: 8px; }
+  .status .dot { width: 8px; height: 8px; border-radius: 50%; background: #444; flex: none; }
+  .status.live { color: var(--ok); }
+  .status.live .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .status.err { color: var(--red); }
+  .status.err .dot { background: var(--red); }
+  .status.work { color: var(--amber); }
+  .status.work .dot { background: var(--amber); }
+
+  .note { font-size: 12px; color: var(--dim); line-height: 1.7; }
+  .note b { color: var(--text); font-weight: 600; }
+  .hint { font-size: 11px; color: var(--dim); line-height: 1.6; }
+
+  details { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; }
+  summary { font-size: 12px; letter-spacing: 2px; color: var(--dim); cursor: pointer; }
+  details > div { padding-top: 12px; }
+
+  table.diag { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.diag td { padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.diag td:first-child { color: var(--dim); width: 42%; }
+  .yes { color: var(--ok); } .no { color: var(--red); } .maybe { color: var(--amber); }
+
+  .hidden { display: none !important; }
+
+  /* ---------- receiver: the big code screen ---------- */
+  #teslaWait { text-align: center; padding: 26px 16px; }
+  #teslaCode {
+    font-size: 84px; letter-spacing: 20px; font-weight: 700; color: var(--cyan);
+    text-shadow: 0 0 30px rgba(53,214,255,.35); padding-left: 20px; margin: 10px 0 4px;
+  }
+  @media (max-width: 620px) { #teslaCode { font-size: 54px; letter-spacing: 12px; } }
+
+  /* ---------- receiver: the video stage ---------- */
+  #stage {
+    position: fixed; inset: 0; background: #000; display: none;
+    overflow: hidden; z-index: 50; touch-action: none;
+  }
+  #stage.on { display: block; }
+  #stage video {
+    position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    object-fit: contain; background: #000;
+    transform-origin: 0 0;
+  }
+  #stageBar {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+    display: flex; gap: 8px; align-items: center; padding: 10px 12px;
+    background: linear-gradient(0deg, rgba(4,8,13,.92), rgba(4,8,13,0));
+    transition: opacity .25s; flex-wrap: wrap;
+  }
+  #stageBar.fade { opacity: 0; pointer-events: none; }
+  #stageBar button { padding: 9px 13px; font-size: 12px; background: rgba(12,18,28,.9); }
+  #stageStat { font-size: 11px; color: var(--dim); letter-spacing: 1px; margin-left: auto; }
+  #tapPlay {
+    position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center;
+    background: rgba(4,8,13,.86); font-size: 20px; letter-spacing: 4px; color: var(--cyan); flex-direction: column; gap: 10px;
+  }
+  #tapPlay small { font-size: 12px; color: var(--dim); letter-spacing: 1px; }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="ui">
+
+  <header>
+    <div class="logo">TESLA <b>SECOND SCREEN</b></div>
+    <div class="spacer"></div>
+    <button id="homeBtn" class="hidden">← กลับ</button>
+  </header>
+
+  <!-- ============================ HOME ============================ -->
+  <section id="viewHome">
+    <div class="card">
+      <h2>เลือกว่าเครื่องนี้คือเครื่องไหน</h2>
+      <div class="choice">
+        <button id="goTesla" class="primary">📺 จอ Tesla — รับภาพ
+          <span>เปิดหน้านี้ในเบราว์เซอร์ของรถ จอจะขึ้นรหัส 5 หลักให้ไปกรอกที่โน้ตบุ๊ก</span>
+        </button>
+        <button id="goPc">💻 โน้ตบุ๊ก — ส่งภาพ
+          <span>เลือกหน้าจอ/หน้าต่างที่จะส่ง แล้วกรอกรหัสที่เห็นบนจอรถ</span>
+        </button>
+      </div>
+      <div class="note" style="margin-top:14px">
+        ทำงานแบบ WebRTC ต่อตรงระหว่างสองเครื่อง ภาพไม่วิ่งผ่านเซิร์ฟเวอร์ใคร
+        (ใช้เซิร์ฟเวอร์กลางแค่ตอนจับคู่รหัสเท่านั้น)
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>ก่อนใช้ครั้งแรก</h2>
+      <div class="note">
+        <b>1.</b> จอด/จอดชาร์จก่อน — เบราว์เซอร์ของ Tesla ใช้ได้เต็มที่ตอนรถจอด<br>
+        <b>2.</b> ให้รถกับโน้ตบุ๊ก <b>อยู่วง Wi-Fi เดียวกัน</b> (ต่อรถเข้า hotspot ของโน้ตบุ๊ก/มือถือได้)
+        ภาพจะวิ่งตรงในวง LAN คมและหน่วงต่ำสุด ถ้าอยู่คนละเน็ตต้องมี TURN server เอง<br>
+        <b>3.</b> อยากได้ "จอที่สองจริง ๆ" (ลากหน้าต่างข้ามไปได้ ไม่ใช่ mirror)
+        ต้องลง virtual display driver ที่โน้ตบุ๊กก่อน แล้วค่อยแชร์จอเสมือนนั้นมา — อ่านราย
+        ละเอียดใน README ของโปรเจกต์<br>
+        <b>4.</b> ยังไม่แน่ใจว่าเบราว์เซอร์รถไหว → กด "ตรวจเบราว์เซอร์" บนจอรถก่อน
+      </div>
+      <div class="row" style="margin-top:14px">
+        <button id="goCheck">🔍 ตรวจเบราว์เซอร์เครื่องนี้</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ TESLA / RECEIVER ============================ -->
+  <section id="viewTesla" class="hidden">
+    <div class="card" id="teslaWait">
+      <div class="status work" id="rxStatus" style="justify-content:center"><i class="dot"></i><span>กำลังเชื่อมต่อ…</span></div>
+      <div id="teslaCode">-----</div>
+      <div class="note">กรอกรหัสนี้ที่โน้ตบุ๊ก แล้วกด “เริ่มแชร์จอ”</div>
+      <div class="row" style="justify-content:center; margin-top:16px">
+        <button id="rxRetry">รหัสใหม่</button>
+        <button id="rxCheck">ตรวจเบราว์เซอร์</button>
+      </div>
+      <div class="hint" style="margin-top:14px">
+        เก็บหน้านี้เป็น bookmark ในรถไว้ ครั้งหน้าจะได้ไม่ต้องพิมพ์ URL ใหม่
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ PC / SENDER ============================ -->
+  <section id="viewPc" class="hidden">
+    <div class="card">
+      <h2>เชื่อมต่อ</h2>
+      <div class="row">
+        <label class="fld">รหัสจากจอรถ
+          <input id="txCode" class="code-in" type="text" inputmode="numeric" maxlength="5" placeholder="00000" autocomplete="off">
+        </label>
+        <div style="flex:1"></div>
+        <button id="txStart" class="primary">▶ เริ่มแชร์จอ</button>
+        <button id="txStop" class="danger hidden">■ หยุด</button>
+      </div>
+      <div class="status" id="txStatus" style="margin-top:14px"><i class="dot"></i><span>ยังไม่ได้เชื่อมต่อ</span></div>
+    </div>
+
+    <div class="card">
+      <h2>คุณภาพ</h2>
+      <div class="grid2">
+        <label class="fld">ความละเอียด
+          <select id="txRes">
+            <option value="0">ตามจอจริง (คมสุด)</option>
+            <option value="1920" selected>1920 px</option>
+            <option value="1600">1600 px</option>
+            <option value="1280">1280 px (ลื่นสุด)</option>
+          </select>
+        </label>
+        <label class="fld">เฟรมเรต
+          <select id="txFps">
+            <option value="5">5 fps — อ่านเอกสาร</option>
+            <option value="15" selected>15 fps — ทำงานทั่วไป</option>
+            <option value="30">30 fps — วิดีโอ/เลื่อนเยอะ</option>
+          </select>
+        </label>
+        <label class="fld">Codec
+          <select id="txCodec">
+            <option value="VP8" selected>VP8 (เข้ากันได้กว้างสุด)</option>
+            <option value="H264">H264 (ถอดรหัสด้วยฮาร์ดแวร์)</option>
+            <option value="VP9">VP9 (ตัวหนังสือคมสุด)</option>
+            <option value="auto">Auto</option>
+          </select>
+        </label>
+        <label class="fld"><span id="txBrLabel">บิตเรต — 5.0 Mbps</span>
+          <input id="txBr" type="range" min="1" max="12" step="0.5" value="5">
+        </label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label class="hint"><input type="checkbox" id="txAudio"> ส่งเสียงคอมไปออกลำโพงรถด้วย (ต้องเลือกแท็บ + ติ๊ก “share audio”)</label>
+      </div>
+      <div class="hint" style="margin-top:10px">
+        ตัวหนังสือเบลอ → ลดเฟรมเรตเป็น 5 fps แล้วดันบิตเรตขึ้น • ภาพกระตุก → ลดความละเอียดเป็น 1280
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>สถานะการส่ง</h2>
+      <table class="diag" id="txStats"><tr><td>—</td><td>ยังไม่เริ่ม</td></tr></table>
+      <details>
+        <summary>ตั้งค่าขั้นสูง (signaling / TURN)</summary>
+        <div class="grid2">
+          <label class="fld">PeerJS host (ว่าง = ใช้ของ public)
+            <input id="advHost" type="text" placeholder="0.peerjs.com" autocomplete="off">
+          </label>
+          <label class="fld">TURN url
+            <input id="advTurn" type="text" placeholder="turn:host:3478" autocomplete="off">
+          </label>
+          <label class="fld">TURN user
+            <input id="advTurnUser" type="text" autocomplete="off">
+          </label>
+          <label class="fld">TURN pass
+            <input id="advTurnPass" type="password" autocomplete="off">
+          </label>
+        </div>
+        <div class="hint" style="margin-top:10px">
+          ค่าเหล่านี้เก็บไว้ในเครื่องนี้เท่านั้น และต้องตั้งให้ <b>เหมือนกันทั้งสองฝั่ง</b>
+          (ฝั่งรถตั้งได้จากหน้า “ตรวจเบราว์เซอร์” → ตั้งค่าขั้นสูง)
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ============================ DIAGNOSTICS ============================ -->
+  <section id="viewCheck" class="hidden">
+    <div class="card">
+      <h2>เบราว์เซอร์เครื่องนี้ทำอะไรได้บ้าง</h2>
+      <table class="diag" id="checkTable"></table>
+      <div class="row" style="margin-top:14px">
+        <button id="checkIce">ทดสอบเส้นทางเน็ต (ICE)</button>
+        <button id="checkRerun">ตรวจใหม่</button>
+      </div>
+      <div class="hint" style="margin-top:12px">
+        ต้องได้ <b>สีเขียว</b> ที่ RTCPeerConnection + วิดีโอ codec อย่างน้อยหนึ่งตัว จอรถถึงจะรับภาพได้
+      </div>
+      <details>
+        <summary>ตั้งค่าขั้นสูง (signaling / TURN)</summary>
+        <div class="grid2">
+          <label class="fld">PeerJS host
+            <input id="advHost2" type="text" placeholder="0.peerjs.com" autocomplete="off">
+          </label>
+          <label class="fld">TURN url
+            <input id="advTurn2" type="text" placeholder="turn:host:3478" autocomplete="off">
+          </label>
+          <label class="fld">TURN user
+            <input id="advTurnUser2" type="text" autocomplete="off">
+          </label>
+          <label class="fld">TURN pass
+            <input id="advTurnPass2" type="password" autocomplete="off">
+          </label>
+        </div>
+      </details>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============================ VIDEO STAGE (receiver) ============================ -->
+<div id="stage">
+  <video id="vid" autoplay playsinline muted></video>
+  <div id="tapPlay" class="hidden">▶ แตะเพื่อเริ่มแสดงภาพ<small>เบราว์เซอร์รถต้องให้แตะก่อนถึงเล่นได้</small></div>
+  <div id="stageBar">
+    <button id="zOut">−</button>
+    <button id="zFit">FIT</button>
+    <button id="zIn">+</button>
+    <button id="btnFs">⛶</button>
+    <button id="btnMute" class="hidden">🔇</button>
+    <button id="btnEnd" class="danger">ตัดการเชื่อมต่อ</button>
+    <div id="stageStat"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ==================================================================
+   Tesla Second Screen
+   ------------------------------------------------------------------
+   Sender  = notebook. Captures a screen/window with getDisplayMedia()
+             and pushes it over WebRTC.
+   Receiver= the car's browser. Registers a 5-digit code on the PeerJS
+             broker, shows it, and plays whatever stream arrives.
+
+   The broker is only used to swap SDP/ICE. The video itself is a direct
+   peer-to-peer stream, so on one LAN it never leaves the local network.
+
+   Kept to ES2017 syntax on purpose: the Chromium inside a Tesla is old
+   (no optional chaining, no ??, no replaceAll).
+   ================================================================== */
+
+var ID_PREFIX = "tsm2-";
+var PEERJS_SRCS = [
+  "https://cdn.jsdelivr.net/npm/peerjs@1.4.7/dist/peerjs.min.js",
+  "https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"
+];
+
+var $ = function (id) { return document.getElementById(id); };
+function show(el) { el.classList.remove("hidden"); }
+function hide(el) { el.classList.add("hidden"); }
+function setStatus(el, kind, text) {
+  el.className = "status" + (kind ? " " + kind : "");
+  el.lastElementChild.textContent = text;
+}
+
+/* ---------------- persisted advanced settings ---------------- */
+var CFG_KEY = "tsm2-cfg";
+function loadCfg() {
+  try {
+    var raw = localStorage.getItem(CFG_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+function saveCfg(c) {
+  try { localStorage.setItem(CFG_KEY, JSON.stringify(c)); } catch (e) {}
+}
+var cfg = loadCfg();
+
+function bindCfg(inputIds, key) {
+  inputIds.forEach(function (id) {
+    var el = $(id);
+    if (!el) return;
+    if (cfg[key]) el.value = cfg[key];
+    el.addEventListener("change", function () {
+      cfg[key] = el.value.trim();
+      saveCfg(cfg);
+      inputIds.forEach(function (o) { if (o !== id && $(o)) $(o).value = el.value; });
+    });
+  });
+}
+bindCfg(["advHost", "advHost2"], "host");
+bindCfg(["advTurn", "advTurn2"], "turn");
+bindCfg(["advTurnUser", "advTurnUser2"], "turnUser");
+bindCfg(["advTurnPass", "advTurnPass2"], "turnPass");
+
+function iceServers() {
+  var list = [
+    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }
+  ];
+  if (cfg.turn) {
+    var t = { urls: cfg.turn };
+    if (cfg.turnUser) t.username = cfg.turnUser;
+    if (cfg.turnPass) t.credential = cfg.turnPass;
+    list.push(t);
+  }
+  return list;
+}
+/* รับได้ทั้ง "peer.example.com", "peer.example.com:9000" และ
+   "http://192.168.1.10:9000/myapp" — จะได้รัน PeerServer เองบนพอร์ตไหนก็ได้ */
+function peerOpts() {
+  var o = { debug: 1, config: { iceServers: iceServers(), sdpSemantics: "unified-plan" } };
+  var h = cfg.host;
+  if (h) {
+    var secure = true, port = 443, path = "/", hostname = h;
+    var m = hostname.match(/^(https?):\/\/(.*)$/i);
+    if (m) {
+      secure = m[1].toLowerCase() === "https";
+      port = secure ? 443 : 80;
+      hostname = m[2];
+    }
+    var slash = hostname.indexOf("/");
+    if (slash >= 0) {
+      path = hostname.slice(slash);
+      hostname = hostname.slice(0, slash);
+    }
+    var colon = hostname.indexOf(":");
+    if (colon >= 0) {
+      port = parseInt(hostname.slice(colon + 1), 10) || port;
+      hostname = hostname.slice(0, colon);
+    }
+    o.host = hostname;
+    o.port = port;
+    o.secure = secure;
+    o.path = path || "/";
+  }
+  return o;
+}
+
+/* ---------------- PeerJS loader (with CDN fallback) ---------------- */
+var peerjsPromise = null;
+function loadPeerJS() {
+  if (window.Peer) return Promise.resolve();
+  if (peerjsPromise) return peerjsPromise;
+  peerjsPromise = new Promise(function (resolve, reject) {
+    var i = 0;
+    function tryNext() {
+      if (i >= PEERJS_SRCS.length) {
+        reject(new Error("โหลดไลบรารี PeerJS ไม่ได้ — เบราว์เซอร์ในรถต้องต่อเน็ตได้"));
+        return;
+      }
+      var s = document.createElement("script");
+      s.src = PEERJS_SRCS[i++];
+      s.onload = function () { resolve(); };
+      s.onerror = function () { tryNext(); };
+      document.head.appendChild(s);
+    }
+    tryNext();
+  });
+  return peerjsPromise;
+}
+
+/* ---------------- SDP codec preference ---------------- */
+function preferCodec(sdp, codec) {
+  if (!codec || codec === "auto") return sdp;
+  var lines = sdp.split(/\r?\n/);
+  var mIdx = -1, i;
+  for (i = 0; i < lines.length; i++) {
+    if (lines[i].indexOf("m=video") === 0) { mIdx = i; break; }
+  }
+  if (mIdx < 0) return sdp;
+
+  var wanted = [];
+  var re = new RegExp("^a=rtpmap:(\\d+) " + codec + "/90000", "i");
+  for (i = mIdx; i < lines.length; i++) {
+    if (i > mIdx && lines[i].indexOf("m=") === 0) break;
+    var m = lines[i].match(re);
+    if (m) wanted.push(m[1]);
+  }
+  if (!wanted.length) return sdp;
+
+  var parts = lines[mIdx].split(" ");
+  var head = parts.slice(0, 3);
+  var pts = parts.slice(3);
+  var rest = pts.filter(function (p) { return wanted.indexOf(p) < 0; });
+  lines[mIdx] = head.concat(wanted, rest).join(" ");
+  return lines.join("\r\n");
+}
+
+/* ---------------- shared stats helper ---------------- */
+function fmtKbps(bps) {
+  if (bps >= 1000000) return (bps / 1000000).toFixed(2) + " Mbps";
+  return Math.round(bps / 1000) + " kbps";
+}
+
+/* ==================================================================
+   Views
+   ================================================================== */
+var views = { home: $("viewHome"), tesla: $("viewTesla"), pc: $("viewPc"), check: $("viewCheck") };
+var current = "home";
+
+function go(name) {
+  if (current === "tesla" && name !== "tesla") stopReceiver();
+  if (current === "pc" && name !== "pc") stopSender();
+  Object.keys(views).forEach(function (k) { hide(views[k]); });
+  show(views[name]);
+  current = name;
+  if (name === "home") hide($("homeBtn")); else show($("homeBtn"));
+  if (location.hash.slice(1) !== name) {
+    try { history.replaceState(null, "", "#" + name); } catch (e) { location.hash = name; }
+  }
+  if (name === "tesla") startReceiver();
+  if (name === "check") runChecks();
+}
+
+$("goTesla").onclick = function () { go("tesla"); };
+$("goPc").onclick = function () { go("pc"); };
+$("goCheck").onclick = function () { go("check"); };
+$("homeBtn").onclick = function () { go("home"); };
+$("rxCheck").onclick = function () { go("check"); };
+
+/* ==================================================================
+   RECEIVER  (the car)
+   ================================================================== */
+var rxPeer = null, rxCall = null, rxTries = 0, rxStatsTimer = null, rxWakeLock = null, rxData = null;
+var vid = $("vid"), stage = $("stage");
+
+function sayBye() {
+  if (rxData && rxData.open) { try { rxData.send("bye"); } catch (e) {} }
+}
+
+function stopReceiver() {
+  if (rxStatsTimer) { clearInterval(rxStatsTimer); rxStatsTimer = null; }
+  if (rxCall) { sayBye(); try { rxCall.close(); } catch (e) {} rxCall = null; }
+  rxData = null;
+  if (rxPeer) {
+    var p = rxPeer;
+    rxPeer = null;
+    setTimeout(function () { try { p.destroy(); } catch (e) {} }, 200);
+  }
+  if (rxWakeLock) { try { rxWakeLock.release(); } catch (e) {} rxWakeLock = null; }
+  vid.srcObject = null;
+  stage.classList.remove("on");
+}
+
+function startReceiver() {
+  stopReceiver();
+  rxTries = 0;
+  setStatus($("rxStatus"), "work", "กำลังเชื่อมต่อเซิร์ฟเวอร์จับคู่…");
+  $("teslaCode").textContent = "-----";
+  loadPeerJS().then(registerCode, function (err) {
+    setStatus($("rxStatus"), "err", err.message);
+  });
+}
+
+function registerCode() {
+  var code = String(Math.floor(10000 + Math.random() * 90000));
+  var peer = new Peer(ID_PREFIX + code, peerOpts());
+  rxPeer = peer;
+
+  /* peer เก่าถูกทำลายแบบหน่วงเวลา (รอส่ง "bye" ให้ทัน) จึงต้องกันไม่ให้
+     event ที่ตกค้างมาเขียนทับสถานะของ peer ตัวใหม่ */
+  function stale() { return rxPeer !== peer; }
+
+  peer.on("open", function () {
+    if (stale()) return;
+    $("teslaCode").textContent = code;
+    setStatus($("rxStatus"), "live", "พร้อมรับภาพ — รอโน้ตบุ๊กเชื่อมต่อ");
+  });
+
+  peer.on("call", function (call) {
+    if (stale()) { try { call.close(); } catch (e) {} return; }
+    if (rxCall) { try { rxCall.close(); } catch (e) {} }
+    rxCall = call;
+    setStatus($("rxStatus"), "work", "กำลังรับภาพ…");
+    call.answer();
+    call.on("stream", onRxStream);
+    call.on("close", function () { endRxCall("โน้ตบุ๊กหยุดแชร์แล้ว"); });
+    call.on("error", function () { endRxCall("การเชื่อมต่อขาด"); });
+    watchRxConnection(call);
+  });
+
+  /* ช่องข้อมูลเล็ก ๆ ไว้ให้โน้ตบุ๊กบอกตรง ๆ ว่า "เลิกแชร์แล้ว"
+     จอรถจะได้เคลียร์ทันที ไม่ต้องรอ ICE timeout สิบกว่าวินาที */
+  peer.on("connection", function (conn) {
+    if (stale()) { try { conn.close(); } catch (e) {} return; }
+    rxData = conn;
+    conn.on("data", function (d) {
+      if (d === "bye" && rxCall) endRxCall("โน้ตบุ๊กหยุดแชร์แล้ว");
+    });
+    conn.on("close", function () { if (rxData === conn) rxData = null; });
+  });
+
+  peer.on("disconnected", function () {
+    if (rxPeer === peer) { try { peer.reconnect(); } catch (e) {} }
+  });
+
+  peer.on("error", function (err) {
+    if (stale()) return;
+    if (err.type === "unavailable-id" && rxTries < 6) {
+      rxTries++;
+      try { peer.destroy(); } catch (e) {}
+      registerCode();
+      return;
+    }
+    var msg = "เชื่อมต่อไม่สำเร็จ: " + err.type;
+    if (err.type === "network" || err.type === "server-error" || err.type === "socket-error") {
+      msg = "ต่อเซิร์ฟเวอร์จับคู่ไม่ได้ — เช็กเน็ตของรถ แล้วกด “รหัสใหม่”";
+    }
+    setStatus($("rxStatus"), "err", msg);
+  });
+}
+
+$("rxRetry").onclick = startReceiver;
+
+function onRxStream(stream) {
+  vid.srcObject = stream;
+  stage.classList.add("on");
+  fitVideo();
+  requestWakeLock();
+  var hasAudio = stream.getAudioTracks().length > 0;
+  if (hasAudio) show($("btnMute")); else hide($("btnMute"));
+
+  var p = vid.play();
+  if (p && p.catch) {
+    p.catch(function () {
+      show($("tapPlay"));
+    });
+  }
+  startRxStats();
+  autoFadeBar();
+}
+
+$("tapPlay").onclick = function () {
+  vid.muted = false;
+  vid.play().then(function () { hide($("tapPlay")); }, function () {
+    vid.muted = true;
+    vid.play();
+    hide($("tapPlay"));
+  });
+};
+
+/* ปิดฝั่งโน้ตบุ๊กไม่ได้ส่งสัญญาณบอกเสมอไป (PeerJS ไม่มีข้อความ "ปิดสาย" ที่เชื่อถือได้)
+   เลยต้องเฝ้าสถานะ ICE เอง ไม่งั้นจอรถจะค้างภาพนิ่งอยู่อย่างนั้น */
+function watchRxConnection(call) {
+  var pc = call.peerConnection;
+  if (!pc || !pc.addEventListener) return;
+  var grace = null;
+  pc.addEventListener("iceconnectionstatechange", function () {
+    if (rxCall !== call) return;
+    var st = pc.iceConnectionState;
+    if (st === "failed" || st === "closed") {
+      if (grace) clearTimeout(grace);
+      endRxCall("การเชื่อมต่อขาด");
+    } else if (st === "disconnected") {
+      $("stageStat").textContent = "สัญญาณสะดุด…";
+      if (grace) clearTimeout(grace);
+      grace = setTimeout(function () {
+        if (rxCall !== call) return;
+        var now = pc.iceConnectionState;
+        if (now !== "connected" && now !== "completed") {
+          endRxCall("โน้ตบุ๊กหยุดแชร์แล้ว");
+        }
+      }, 5000);
+    } else if (st === "connected" || st === "completed") {
+      if (grace) { clearTimeout(grace); grace = null; }
+      setStatus($("rxStatus"), "live", "กำลังรับภาพ");
+    }
+  });
+}
+
+function endRxCall(msg) {
+  if (rxStatsTimer) { clearInterval(rxStatsTimer); rxStatsTimer = null; }
+  rxCall = null;
+  vid.srcObject = null;
+  stage.classList.remove("on");
+  hide($("tapPlay"));
+  $("stageStat").textContent = "";
+  fitVideo();
+  setStatus($("rxStatus"), "work", msg + " — รหัสเดิมยังใช้ได้");
+}
+
+$("btnEnd").onclick = function () {
+  sayBye();
+  if (rxCall) { try { rxCall.close(); } catch (e) {} }
+  endRxCall("ตัดการเชื่อมต่อแล้ว");
+};
+
+$("btnMute").onclick = function () {
+  vid.muted = !vid.muted;
+  $("btnMute").textContent = vid.muted ? "🔇" : "🔊";
+};
+
+$("btnFs").onclick = function () {
+  var el = document.documentElement;
+  if (document.fullscreenElement) {
+    if (document.exitFullscreen) document.exitFullscreen();
+  } else if (el.requestFullscreen) {
+    el.requestFullscreen().catch(function () {});
+  } else if (el.webkitRequestFullscreen) {
+    el.webkitRequestFullscreen();
+  }
+};
+
+function requestWakeLock() {
+  if (!navigator.wakeLock || !navigator.wakeLock.request) return;
+  navigator.wakeLock.request("screen").then(function (l) { rxWakeLock = l; }, function () {});
+}
+
+/* ---- zoom / pan on the car screen ---- */
+var zoom = 1, panX = 0, panY = 0;
+function applyTransform() {
+  vid.style.transform = "translate(" + panX + "px," + panY + "px) scale(" + zoom + ")";
+}
+function fitVideo() { zoom = 1; panX = 0; panY = 0; applyTransform(); }
+function clampPan() {
+  var w = stage.clientWidth, h = stage.clientHeight;
+  var maxX = Math.max(0, w * (zoom - 1)), maxY = Math.max(0, h * (zoom - 1));
+  panX = Math.min(0, Math.max(-maxX, panX));
+  panY = Math.min(0, Math.max(-maxY, panY));
+}
+function setZoom(z, cx, cy) {
+  var old = zoom;
+  zoom = Math.min(4, Math.max(1, z));
+  if (cx === undefined) { cx = stage.clientWidth / 2; cy = stage.clientHeight / 2; }
+  var k = zoom / old;
+  panX = cx - k * (cx - panX);
+  panY = cy - k * (cy - panY);
+  clampPan();
+  applyTransform();
+}
+$("zIn").onclick = function () { setZoom(zoom * 1.25); };
+$("zOut").onclick = function () { setZoom(zoom / 1.25); };
+$("zFit").onclick = fitVideo;
+
+var dragging = false, dragX = 0, dragY = 0, movedAt = 0;
+stage.addEventListener("pointerdown", function (e) {
+  showBar();
+  if (zoom <= 1 || e.target.tagName === "BUTTON") return;
+  dragging = true; dragX = e.clientX; dragY = e.clientY;
+});
+stage.addEventListener("pointermove", function (e) {
+  if (!dragging) return;
+  panX += e.clientX - dragX; panY += e.clientY - dragY;
+  dragX = e.clientX; dragY = e.clientY;
+  clampPan(); applyTransform();
+});
+stage.addEventListener("pointerup", function () { dragging = false; });
+stage.addEventListener("pointercancel", function () { dragging = false; });
+
+var barTimer = null;
+function showBar() {
+  $("stageBar").classList.remove("fade");
+  autoFadeBar();
+}
+function autoFadeBar() {
+  if (barTimer) clearTimeout(barTimer);
+  barTimer = setTimeout(function () { $("stageBar").classList.add("fade"); }, 4000);
+}
+
+/* ---- receiver stats ---- */
+function startRxStats() {
+  var lastBytes = 0, lastTs = 0;
+  if (rxStatsTimer) clearInterval(rxStatsTimer);
+  rxStatsTimer = setInterval(function () {
+    if (!rxCall || !rxCall.peerConnection) return;
+    rxCall.peerConnection.getStats(null).then(function (report) {
+      var line = "";
+      report.forEach(function (s) {
+        if (s.type === "inbound-rtp" && s.kind === "video") {
+          var bps = 0;
+          if (lastTs) bps = (s.bytesReceived - lastBytes) * 8 / ((s.timestamp - lastTs) / 1000);
+          lastBytes = s.bytesReceived; lastTs = s.timestamp;
+          line = (s.frameWidth ? s.frameWidth + "×" + s.frameHeight + "  " : "") +
+                 (s.framesPerSecond ? Math.round(s.framesPerSecond) + " fps  " : "") +
+                 fmtKbps(bps);
+        }
+      });
+      $("stageStat").textContent = line;
+    }, function () {});
+  }, 1000);
+}
+
+/* ==================================================================
+   SENDER  (the notebook)
+   ================================================================== */
+var txPeer = null, txCall = null, txStream = null, txStatsTimer = null, txData = null;
+
+function stopSender() {
+  if (txStatsTimer) { clearInterval(txStatsTimer); txStatsTimer = null; }
+  var peer = txPeer, data = txData;
+  txPeer = null; txData = null;
+  if (txCall) { try { txCall.close(); } catch (e) {} txCall = null; }
+  if (txStream) {
+    txStream.getTracks().forEach(function (t) { t.stop(); });
+    txStream = null;
+  }
+  var told = false;
+  if (data && data.open) {
+    try { data.send("bye"); told = true; } catch (e) {}
+  }
+  if (peer) {
+    // ให้ "bye" ได้ออกจากบัฟเฟอร์ก่อนค่อยทุบ peer ทิ้ง
+    if (told) setTimeout(function () { try { peer.destroy(); } catch (e) {} }, 250);
+    else { try { peer.destroy(); } catch (e) {} }
+  }
+  hide($("txStop"));
+  show($("txStart"));
+}
+
+function bitrateBps() { return Math.round(parseFloat($("txBr").value) * 1000000); }
+function targetFps() { return parseInt($("txFps").value, 10); }
+
+$("txBr").addEventListener("input", function () {
+  $("txBrLabel").textContent = "บิตเรต — " + parseFloat($("txBr").value).toFixed(1) + " Mbps";
+  applyEncoding();
+});
+$("txFps").addEventListener("change", applyEncoding);
+
+$("txCode").addEventListener("input", function () {
+  $("txCode").value = $("txCode").value.replace(/[^0-9]/g, "").slice(0, 5);
+});
+
+$("txStart").onclick = function () { startSender(); };
+$("txStop").onclick = function () {
+  stopSender();
+  setStatus($("txStatus"), "", "หยุดแชร์แล้ว");
+  $("txStats").innerHTML = "<tr><td>—</td><td>ยังไม่เริ่ม</td></tr>";
+};
+
+function startSender() {
+  var code = $("txCode").value.trim();
+  if (!/^\d{5}$/.test(code)) {
+    setStatus($("txStatus"), "err", "กรอกรหัส 5 หลักที่ขึ้นบนจอรถก่อน");
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    setStatus($("txStatus"), "err", "เบราว์เซอร์นี้แชร์หน้าจอไม่ได้ — ใช้ Chrome/Edge บนโน้ตบุ๊ก");
+    return;
+  }
+
+  var res = parseInt($("txRes").value, 10);
+  var video = { frameRate: { ideal: targetFps(), max: targetFps() } };
+  if (res) { video.width = { max: res }; video.height = { max: Math.round(res * 0.75) }; }
+
+  setStatus($("txStatus"), "work", "เลือกหน้าจอที่จะแชร์…");
+
+  navigator.mediaDevices.getDisplayMedia({
+    video: video,
+    audio: $("txAudio").checked
+  }).then(function (stream) {
+    txStream = stream;
+    var track = stream.getVideoTracks()[0];
+    try { track.contentHint = targetFps() <= 5 ? "text" : "detail"; } catch (e) {}
+    track.addEventListener("ended", function () {
+      stopSender();
+      setStatus($("txStatus"), "", "หยุดแชร์แล้ว (ปิดจากแถบของเบราว์เซอร์)");
+    });
+    hide($("txStart"));
+    show($("txStop"));
+    return loadPeerJS().then(function () { connectSender(code); });
+  }).catch(function (err) {
+    stopSender();
+    var m = err && err.name === "NotAllowedError"
+      ? "ยกเลิกการเลือกหน้าจอ"
+      : "แชร์หน้าจอไม่ได้: " + (err && err.message ? err.message : err);
+    setStatus($("txStatus"), "err", m);
+  });
+}
+
+function connectSender(code) {
+  setStatus($("txStatus"), "work", "กำลังเรียกจอรถ…");
+  var peer = new Peer(null, peerOpts());
+  txPeer = peer;
+  var codec = $("txCodec").value;
+
+  peer.on("open", function () {
+    try {
+      txData = peer.connect(ID_PREFIX + code, { reliable: true });
+      txData.on("data", function (d) {
+        if (d === "bye") {
+          stopSender();
+          setStatus($("txStatus"), "", "จอรถตัดการเชื่อมต่อ");
+        }
+      });
+    } catch (e) { txData = null; }
+
+    var call = peer.call(ID_PREFIX + code, txStream, {
+      sdpTransform: function (sdp) { return preferCodec(sdp, codec); }
+    });
+    if (!call) {
+      setStatus($("txStatus"), "err", "เรียกไม่สำเร็จ ลองกดเริ่มใหม่");
+      return;
+    }
+    txCall = call;
+    var pc = call.peerConnection;
+
+    pc.addEventListener("iceconnectionstatechange", function () {
+      var st = pc.iceConnectionState;
+      if (st === "connected" || st === "completed") {
+        setStatus($("txStatus"), "live", "กำลังส่งภาพไปที่จอรถ");
+        applyEncoding();
+      } else if (st === "disconnected") {
+        setStatus($("txStatus"), "work", "สัญญาณสะดุด กำลังต่อใหม่…");
+      } else if (st === "failed") {
+        setStatus($("txStatus"), "err", "ต่อตรงไม่สำเร็จ — เอารถกับโน้ตบุ๊กมาไว้ Wi-Fi เดียวกัน หรือใส่ TURN");
+      }
+    });
+
+    call.on("close", function () {
+      setStatus($("txStatus"), "", "จอรถตัดการเชื่อมต่อ");
+      stopSender();
+    });
+    call.on("error", function (e) {
+      setStatus($("txStatus"), "err", "ผิดพลาด: " + e);
+    });
+
+    startTxStats();
+  });
+
+  peer.on("error", function (err) {
+    var msg;
+    if (err.type === "peer-unavailable") msg = "ไม่พบรหัสนี้ — เช็กตัวเลขบนจอรถ (รหัสจะเปลี่ยนถ้ารีเฟรชหน้าในรถ)";
+    else if (err.type === "network" || err.type === "server-error") msg = "ต่อเซิร์ฟเวอร์จับคู่ไม่ได้";
+    else msg = "ผิดพลาด: " + err.type;
+    setStatus($("txStatus"), "err", msg);
+  });
+}
+
+function applyEncoding() {
+  if (!txCall || !txCall.peerConnection) return;
+  var senders = txCall.peerConnection.getSenders().filter(function (s) {
+    return s.track && s.track.kind === "video";
+  });
+  if (!senders.length) return;
+  var s = senders[0];
+  var p = s.getParameters();
+  if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+  p.encodings[0].maxBitrate = bitrateBps();
+  p.encodings[0].maxFramerate = targetFps();
+  p.encodings[0].scaleResolutionDownBy = 1;
+  try { p.degradationPreference = "maintain-resolution"; } catch (e) {}
+  s.setParameters(p).catch(function () {});
+  if (s.track) {
+    s.track.applyConstraints({ frameRate: { max: targetFps() } }).catch(function () {});
+  }
+}
+
+function startTxStats() {
+  var lastBytes = 0, lastTs = 0;
+  if (txStatsTimer) clearInterval(txStatsTimer);
+  txStatsTimer = setInterval(function () {
+    if (!txCall || !txCall.peerConnection) return;
+    var pc = txCall.peerConnection;
+    pc.getStats(null).then(function (report) {
+      var out = {}, pairId = null;
+      report.forEach(function (s) {
+        if (s.type === "outbound-rtp" && s.kind === "video") {
+          var bps = 0;
+          if (lastTs) bps = (s.bytesSent - lastBytes) * 8 / ((s.timestamp - lastTs) / 1000);
+          lastBytes = s.bytesSent; lastTs = s.timestamp;
+          out["ส่งอยู่"] = fmtKbps(bps);
+          if (s.frameWidth) out["ขนาดภาพ"] = s.frameWidth + " × " + s.frameHeight;
+          if (s.framesPerSecond) out["เฟรมเรต"] = Math.round(s.framesPerSecond) + " fps";
+          if (s.qualityLimitationReason && s.qualityLimitationReason !== "none") {
+            out["ถูกจำกัดโดย"] = s.qualityLimitationReason;
+          }
+        }
+        if (s.type === "candidate-pair" && s.state === "succeeded" && s.nominated) pairId = s.id;
+        if (s.type === "codec" && s.mimeType && s.mimeType.indexOf("video/") === 0) {
+          out["Codec"] = s.mimeType.replace("video/", "");
+        }
+      });
+      if (pairId) {
+        var pair = report.get(pairId);
+        if (pair) {
+          if (pair.currentRoundTripTime !== undefined) {
+            out["หน่วง (RTT)"] = Math.round(pair.currentRoundTripTime * 1000) + " ms";
+          }
+          var local = report.get(pair.localCandidateId);
+          if (local) {
+            out["เส้นทาง"] = local.candidateType === "host" ? "ตรงในวง LAN (ดีที่สุด)"
+              : local.candidateType === "relay" ? "ผ่าน TURN relay"
+              : "ผ่าน NAT (STUN)";
+          }
+        }
+      }
+      var html = "";
+      Object.keys(out).forEach(function (k) {
+        html += "<tr><td>" + k + "</td><td>" + out[k] + "</td></tr>";
+      });
+      $("txStats").innerHTML = html || "<tr><td>—</td><td>กำลังต่อ…</td></tr>";
+    }, function () {});
+  }, 1000);
+}
+
+/* ==================================================================
+   DIAGNOSTICS
+   ================================================================== */
+function row(label, ok, detail) {
+  var cls = ok === true ? "yes" : ok === false ? "no" : "maybe";
+  var mark = ok === true ? "✔ " : ok === false ? "✘ " : "• ";
+  return "<tr><td>" + label + "</td><td class='" + cls + "'>" + mark + detail + "</td></tr>";
+}
+
+function runChecks() {
+  var t = $("checkTable");
+  var html = "";
+
+  var hasPC = typeof window.RTCPeerConnection === "function";
+  html += row("RTCPeerConnection", hasPC, hasPC ? "รองรับ — รับภาพได้" : "ไม่รองรับ — เบราว์เซอร์นี้รับภาพแบบ WebRTC ไม่ได้");
+
+  var codecs = [], names = [];
+  if (window.RTCRtpReceiver && RTCRtpReceiver.getCapabilities) {
+    try {
+      var caps = RTCRtpReceiver.getCapabilities("video");
+      if (caps && caps.codecs) {
+        caps.codecs.forEach(function (c) {
+          var n = c.mimeType.replace("video/", "");
+          if (names.indexOf(n) < 0 && n.indexOf("rtx") < 0 && n.indexOf("red") < 0 && n.indexOf("ulpfec") < 0) {
+            names.push(n);
+          }
+        });
+      }
+      codecs = names;
+    } catch (e) {}
+  }
+  html += row("วิดีโอ codec ที่ถอดรหัสได้", codecs.length > 0,
+    codecs.length ? codecs.join(", ") : "อ่านไม่ได้ (เบราว์เซอร์เก่า) — ลองใช้งานจริงดู VP8 ก่อน");
+
+  var hasGDM = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+  html += row("แชร์หน้าจอ (getDisplayMedia)", hasGDM,
+    hasGDM ? "ได้ — เครื่องนี้เป็นฝั่งส่งได้" : "ไม่ได้ — เครื่องนี้เป็นฝั่งรับเท่านั้น (ปกติสำหรับจอรถ)");
+
+  html += row("Secure context (HTTPS)", !!window.isSecureContext,
+    window.isSecureContext ? "ใช่" : "ไม่ใช่ — บาง API จะถูกปิด");
+
+  html += row("Fullscreen", !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen), "—");
+  html += row("Wake Lock (กันจอดับ)", !!(navigator.wakeLock && navigator.wakeLock.request),
+    (navigator.wakeLock && navigator.wakeLock.request) ? "ได้" : "ไม่มี — จอรถอาจหรี่เอง");
+
+  html += row("ขนาดหน้าต่าง", null, window.innerWidth + " × " + window.innerHeight +
+    " px  (จอ " + screen.width + " × " + screen.height + ", DPR " + (window.devicePixelRatio || 1) + ")");
+
+  var ua = navigator.userAgent;
+  var chrome = ua.match(/Chrom(e|ium)\/(\d+)/);
+  html += row("Chromium version", chrome ? parseInt(chrome[2], 10) >= 70 : null,
+    chrome ? chrome[2] : "ไม่ทราบ");
+  html += row("User agent", null, "<span style='word-break:break-all'>" + ua + "</span>");
+
+  html += "<tr id='iceRow'><td>เส้นทางเน็ต (ICE)</td><td class='maybe'>• ยังไม่ได้ทดสอบ</td></tr>";
+  t.innerHTML = html;
+}
+
+$("checkRerun").onclick = runChecks;
+
+$("checkIce").onclick = function () {
+  var cell = document.querySelector("#iceRow td:last-child");
+  if (!cell) return;
+  if (typeof RTCPeerConnection !== "function") {
+    cell.className = "no"; cell.textContent = "✘ ไม่มี RTCPeerConnection";
+    return;
+  }
+  cell.className = "maybe"; cell.textContent = "• กำลังทดสอบ…";
+  var found = { host: 0, srflx: 0, relay: 0 };
+  var pc = new RTCPeerConnection({ iceServers: iceServers() });
+  try { pc.addTransceiver("video", { direction: "recvonly" }); }
+  catch (e) { try { pc.createDataChannel("x"); } catch (e2) {} }
+
+  pc.onicecandidate = function (ev) {
+    if (!ev.candidate) return;
+    var c = ev.candidate.candidate;
+    if (c.indexOf(" typ host") > 0) found.host++;
+    else if (c.indexOf(" typ srflx") > 0) found.srflx++;
+    else if (c.indexOf(" typ relay") > 0) found.relay++;
+  };
+  pc.createOffer().then(function (o) { return pc.setLocalDescription(o); }).catch(function () {});
+
+  setTimeout(function () {
+    try { pc.close(); } catch (e) {}
+    var parts = [];
+    if (found.host) parts.push("host " + found.host + " (ต่อตรงในวง LAN ได้)");
+    if (found.srflx) parts.push("srflx " + found.srflx + " (ออกเน็ตผ่าน STUN ได้)");
+    if (found.relay) parts.push("relay " + found.relay + " (TURN ใช้ได้)");
+    var ok = found.host > 0 || found.srflx > 0;
+    cell.className = ok ? "yes" : "no";
+    cell.textContent = (ok ? "✔ " : "✘ ") + (parts.length ? parts.join(" · ") : "ไม่เจอ candidate เลย — เน็ตของรถอาจถูกบล็อก");
+  }, 6000);
+};
+
+/* ==================================================================
+   boot
+   ================================================================== */
+window.addEventListener("beforeunload", function () { stopSender(); stopReceiver(); });
+
+var initial = location.hash.slice(1);
+if (!views[initial]) initial = "home";
+go(initial);
+</script>
+</body>
+</html>
