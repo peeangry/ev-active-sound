@@ -216,8 +216,9 @@
       <div class="grid2">
         <label class="fld">ความละเอียด
           <select id="txRes">
+            <option value="fit" id="txResFit" selected>พอดีจอรถ (แนะนำ)</option>
             <option value="0">ตามจอจริง (คมสุด)</option>
-            <option value="1920" selected>1920 px</option>
+            <option value="1920">1920 px</option>
             <option value="1600">1600 px</option>
             <option value="1280">1280 px (ลื่นสุด)</option>
           </select>
@@ -245,7 +246,8 @@
         <label class="hint"><input type="checkbox" id="txAudio"> ส่งเสียงคอมไปออกลำโพงรถด้วย (ต้องเลือกแท็บ + ติ๊ก “share audio”)</label>
       </div>
       <div class="hint" style="margin-top:10px">
-        ตัวหนังสือเบลอ → ลดเฟรมเรตเป็น 5 fps แล้วดันบิตเรตขึ้น • ภาพกระตุก → ลดความละเอียดเป็น 1280
+        ตัวหนังสือเบลอ → ลดเฟรมเรตเป็น 5 fps แล้วดันบิตเรตขึ้น • ภาพกระตุก → ลอง codec H264
+        (จอรถถอดรหัสด้วยฮาร์ดแวร์ได้) และเช็กว่า “เส้นทาง” ด้านล่างขึ้นว่าต่อตรงในวง LAN
       </div>
     </div>
 
@@ -578,6 +580,18 @@ function registerCode() {
   peer.on("connection", function (conn) {
     if (stale()) { try { conn.close(); } catch (e) {} return; }
     rxData = conn;
+    conn.on("open", function () {
+      /* บอกโน้ตบุ๊กว่าจอรถกว้างยาวจริงเท่าไหร่ จะได้ไม่ส่ง 1080p มาให้
+         จอที่แสดงได้ไม่ถึง — เปลืองบิตเรตและ CPU ถอดรหัสของรถฟรี ๆ */
+      var dpr = window.devicePixelRatio || 1;
+      try {
+        conn.send({
+          t: "screen",
+          w: Math.round(window.innerWidth * dpr),
+          h: Math.round(window.innerHeight * dpr)
+        });
+      } catch (e) {}
+    });
     conn.on("data", function (d) {
       if (d === "bye" && rxCall) endRxCall("โน้ตบุ๊กหยุดแชร์แล้ว");
     });
@@ -606,7 +620,20 @@ function registerCode() {
 
 $("rxRetry").onclick = startReceiver;
 
+/* ปกติ WebRTC กันภาพกระตุกด้วยการดองเฟรมไว้ใน jitter buffer ก่อนเล่น
+   ซึ่งแลกมาด้วยความหน่วง งานแชร์จอในวง LAN ไม่ต้องดองขนาดนั้น
+   (ชื่อ property เปลี่ยนตามเวอร์ชัน Chromium เลยตั้งทั้งสองแบบ) */
+function trimJitterBuffer(call) {
+  if (!call.peerConnection || !call.peerConnection.getReceivers) return;
+  call.peerConnection.getReceivers().forEach(function (r) {
+    if (!r.track || r.track.kind !== "video") return;
+    try { r.playoutDelayHint = 0; } catch (e) {}
+    try { r.jitterBufferTarget = 0; } catch (e) {}
+  });
+}
+
 function onRxStream(stream) {
+  if (rxCall) trimJitterBuffer(rxCall);
   vid.srcObject = stream;
   stage.classList.add("on");
   fitVideo();
@@ -778,6 +805,7 @@ function startRxStats() {
    SENDER  (the notebook)
    ================================================================== */
 var txPeer = null, txCall = null, txStream = null, txStatsTimer = null, txData = null;
+var carW = 0, carH = 0;   // ขนาดจอรถจริง ที่ฝั่งรับรายงานมาหลังต่อติด
 
 function stopSender() {
   if (txStatsTimer) { clearInterval(txStatsTimer); txStatsTimer = null; }
@@ -804,11 +832,37 @@ function stopSender() {
 function bitrateBps() { return Math.round(parseFloat($("txBr").value) * 1000000); }
 function targetFps() { return parseInt($("txFps").value, 10); }
 
+/* ขนาดสูงสุดที่จะส่ง — null = ไม่จำกัด (ส่งตามจอจริง) */
+function resCap() {
+  var mode = $("txRes").value;
+  if (mode === "0") return null;
+  if (mode === "fit") {
+    // ยังไม่ได้ยินจากจอรถ → กันไว้ที่ 1920 ก่อน
+    return carW ? { w: carW, h: carH } : { w: 1920, h: 1440 };
+  }
+  var r = parseInt(mode, 10);
+  return { w: r, h: Math.round(r * 0.75) };
+}
+
+/* คุมขนาด+เฟรมเรตที่ระดับ track — ต้องตั้งพร้อมกันเสมอ เพราะ
+   applyConstraints() แทนที่ constraint ชุดเดิมทั้งก้อน ไม่ใช่ merge */
+function applyResolution() {
+  if (!txStream) return;
+  var track = txStream.getVideoTracks()[0];
+  if (!track) return;
+  var c = { frameRate: { max: targetFps() } };
+  var res = resCap();
+  if (res) { c.width = { max: res.w }; c.height = { max: res.h }; }
+  track.applyConstraints(c).catch(function () {});
+  try { track.contentHint = targetFps() <= 5 ? "text" : "detail"; } catch (e) {}
+}
+
 $("txBr").addEventListener("input", function () {
   $("txBrLabel").textContent = "บิตเรต — " + parseFloat($("txBr").value).toFixed(1) + " Mbps";
   applyEncoding();
 });
 $("txFps").addEventListener("change", applyEncoding);
+$("txRes").addEventListener("change", applyEncoding);
 
 $("txCode").addEventListener("input", function () {
   $("txCode").value = $("txCode").value.replace(/[^0-9]/g, "").slice(0, 5);
@@ -832,9 +886,11 @@ function startSender() {
     return;
   }
 
-  var res = parseInt($("txRes").value, 10);
+  /* ยังไม่รู้ขนาดจอรถตอนนี้ (รู้หลังต่อติด) เลยเริ่มที่ 1920 ไว้ก่อน
+     แล้วค่อยหด/ขยายด้วย applyResolution() เมื่อจอรถรายงานขนาดมา */
   var video = { frameRate: { ideal: targetFps(), max: targetFps() } };
-  if (res) { video.width = { max: res }; video.height = { max: Math.round(res * 0.75) }; }
+  var res = resCap();
+  if (res) { video.width = { max: res.w }; video.height = { max: res.h }; }
 
   setStatus($("txStatus"), "work", "เลือกหน้าจอที่จะแชร์…");
 
@@ -874,6 +930,11 @@ function connectSender(code) {
         if (d === "bye") {
           stopSender();
           setStatus($("txStatus"), "", "จอรถตัดการเชื่อมต่อ");
+        } else if (d && d.t === "screen" && d.w > 0) {
+          carW = d.w;
+          carH = d.h;
+          $("txResFit").textContent = "พอดีจอรถ (" + carW + "×" + carH + ")";
+          applyResolution();
         }
       });
     } catch (e) { txData = null; }
@@ -934,9 +995,7 @@ function applyEncoding() {
   p.encodings[0].scaleResolutionDownBy = 1;
   try { p.degradationPreference = "maintain-resolution"; } catch (e) {}
   s.setParameters(p).catch(function () {});
-  if (s.track) {
-    s.track.applyConstraints({ frameRate: { max: targetFps() } }).catch(function () {});
-  }
+  applyResolution();
 }
 
 function startTxStats() {
@@ -972,9 +1031,12 @@ function startTxStats() {
           }
           var local = report.get(pair.localCandidateId);
           if (local) {
-            out["เส้นทาง"] = local.candidateType === "host" ? "ตรงในวง LAN (ดีที่สุด)"
-              : local.candidateType === "relay" ? "ผ่าน TURN relay"
-              : "ผ่าน NAT (STUN)";
+            out["เส้นทาง"] = local.candidateType === "host"
+              ? "<span class='yes'>ตรงในวง LAN (ดีที่สุด)</span>"
+              : "<span class='no'>" +
+                (local.candidateType === "relay" ? "ผ่าน TURN relay" : "ผ่าน NAT (STUN)") +
+                " — รถอยู่คนละเน็ตกับโน้ตบุ๊ก ภาพจะหน่วงและกระตุก" +
+                "<br>เอารถมาต่อ Wi-Fi เดียวกัน (หรือ hotspot ของโน้ตบุ๊ก) แล้วเริ่มแชร์ใหม่</span>";
           }
         }
       }
