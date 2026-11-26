@@ -37,7 +37,9 @@ function splitCsv(line) {
     const csv = fs.readFileSync(path.join(out, 'orders.csv'), 'utf8').replace(/^﻿/, '').trim().split('\r\n');
     const rows = csv.slice(1).map(splitCsv);
     const byId = Object.fromEntries(rows.map((r) => [r[3], r]));
-    assert.strictEqual(rows.length, 6, 'all six orders');
+    assert.strictEqual(rows.length, 5, 'five paid, not-cancelled orders');
+    assert.ok(!byId['200005'], 'cancelled order left out');
+    assert.ok(!byId['200007'], 'unpaid order left out');
 
     // checkout grouping
     assert.strictEqual(byId['200001'][1], 'checkout:9001');
@@ -52,8 +54,6 @@ function splitCsv(line) {
     assert.strictEqual(byId['200003'][9], 'MASTERCARD *5678');
     assert.strictEqual(byId['200006'][8], 'ชำระเงินปลายทาง');
     assert.strictEqual(byId['200006'][9], '', 'masked phone must not be read as a card');
-    // cancelled
-    assert.strictEqual(byId['200005'][10], 'ยกเลิก');
     // month buckets (Bangkok time)
     assert.strictEqual(byId['200001'][0], '2026-11');
     assert.strictEqual(byId['200003'][0], '2026-10');
@@ -75,6 +75,7 @@ function splitCsv(line) {
     // Report-only works offline.
     await run('--report-only', '--include-cancelled');
     assert.ok(/2026-10,3,509/.test(fs.readFileSync(path.join(out, 'monthly.csv'), 'utf8')));
+    assert.ok(/200005,[^\r\n]*ยกเลิก/.test(fs.readFileSync(path.join(out, 'orders.csv'), 'utf8')));
     console.log('\nE2E OK');
   } finally {
     server.close();

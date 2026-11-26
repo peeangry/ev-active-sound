@@ -57,6 +57,22 @@ function ordersFromList(json) {
     if (items.length) info.listItems = items;
     found.set(id, info);
   });
+  // Status lives on the card around the order (e.g. details_list[i].status), not on the order itself.
+  walk(json, (obj) => {
+    if (!obj.status || typeof obj.status !== 'object') return;
+    const texts = [];
+    walk(obj.status, (o) => { for (const v of Object.values(o)) if (typeof v === 'string') texts.push(v); });
+    if (!texts.length) return;
+    const st = texts.join(' | ');
+    walk(obj, (inner) => {
+      const id = idOf(inner.order_id);
+      if (!id || !found.has(id)) return;
+      const info = found.get(id);
+      info.listStatus = st;
+      if (CANCEL_RE.test(st)) info.listCancelled = true;
+      if (UNPAID_RE.test(st)) info.listUnpaid = true;
+    });
+  });
   // Checkout cards that hold several orders: the checkout id sits on the parent.
   walk(json, (obj) => {
     const co = idOf(obj.checkout_id);
@@ -67,6 +83,20 @@ function ordersFromList(json) {
     });
   });
   return [...found.values()];
+}
+
+const CANCEL_RE = /cancel|ยกเลิก/i;
+const UNPAID_RE = /unpaid|to_?pay|wait(ing)?_?(for_?)?pay|ที่ต้องชำระ|รอการชำระ|รอชำระ/i;
+
+/** Paging info of one order-list response: how many cards it held, and Shopee's next offset if given. */
+function listPage(json) {
+  let cards = null;
+  let next = null;
+  walk(json, (obj) => {
+    if (cards === null && Array.isArray(obj.details_list)) cards = obj.details_list.length;
+    if (next === null && typeof obj.next_offset === 'number') next = obj.next_offset;
+  });
+  return { cards: cards ?? 0, nextOffset: next };
 }
 
 function itemsFrom(node) {
@@ -157,7 +187,7 @@ function parseOrder({ orderId, detail, domText, listInfo = {} }) {
   const tsByKey = (re) => findValues(data, re, isTs).sort((a, b) => a.kp.length - b.kp.length)[0];
   const byRow = rowVal(/order_?time|เวลาที่สั่งซื้อ|order time/i);
   if (isTs(toNum(byRow))) orderTime = toNum(byRow);
-  if (!orderTime) { const f = tsByKey(/^(create_time|order_time|ctime)$/); if (f) orderTime = f.v; }
+  if (!orderTime) { const f = tsByKey(/^(create_time|order_time|order_create_time)$/); if (f) orderTime = f.v; }
   if (!orderTime) orderTime = parseShownDate(textAfter(domText, ['เวลาที่สั่งซื้อ', 'Order Time']));
   let payTime = null;
   const payRow = rowVal(/pay(ment)?_?time|เวลาชำระเงิน|payment time/i);
@@ -165,10 +195,6 @@ function parseOrder({ orderId, detail, domText, listInfo = {} }) {
   if (!payTime) { const f = tsByKey(/^(pay_time|paid_time|payment_time)$/); if (f) payTime = f.v; }
   if (!payTime) payTime = parseShownDate(textAfter(domText, ['เวลาชำระเงิน', 'Payment Time']));
   if (!orderTime) orderTime = payTime;
-  if (!orderTime) {
-    const all = findValues(data, /time/i, isTs).map((x) => x.v);
-    if (all.length) orderTime = Math.min(...all);
-  }
 
   // --- payment
   let payment = null;
@@ -203,21 +229,22 @@ function parseOrder({ orderId, detail, domText, listInfo = {} }) {
   const shopName = (findValues(data, /^(shop_name|username)$/, (v) => typeof v === 'string' && v)[0] || {}).v
     || listInfo.shopName || '';
   let items = itemsFrom(data);
-  if (!items.length && listInfo.listItems) items = listInfo.listItems;
+  if (listInfo.listItems && listInfo.listItems.length >= items.length) items = listInfo.listItems;
   const statusTexts = [];
   walk(data, (obj, kp) => {
     if (!kp.some((k) => /status/i.test(k)) || kp.some((k) => /button|action/i.test(k))) return;
     for (const v of Object.values(obj)) if (typeof v === 'string') statusTexts.push(v);
   });
   const head = (domText || '').slice(0, 1500);
-  const cancelled = statusTexts.some((t) => /cancel|ยกเลิก/i.test(t))
+  const cancelled = !!listInfo.listCancelled || statusTexts.some((t) => CANCEL_RE.test(t))
     || /คำสั่งซื้อถูกยกเลิก|ยกเลิกแล้ว|order cancelled|\bcancelled\b/i.test(head);
+  const unpaid = !cancelled && (!!listInfo.listUnpaid || statusTexts.some((t) => UNPAID_RE.test(t)));
 
   return {
     orderId: String(orderId),
     checkoutId: checkoutId ? String(checkoutId) : null,
     orderTime, payTime, shopName, items, total,
-    payment: payment || null, card, cancelled,
+    payment: payment || null, card, cancelled, unpaid,
   };
 }
 
@@ -350,7 +377,7 @@ h2{font-size:19px;margin:36px 0 8px;display:flex;justify-content:space-between;g
 a{color:var(--acc)}
 </style></head><body><main>
 <h1>Shopee รายจ่ายรายเดือน</h1>
-<p class="sub">${rep.groups.reduce((a, g) => a + g.orders.length, 0)} คำสั่งซื้อ · รวม ${baht(grand)}${opt.includeCancelled ? '' : ' (ไม่นับที่ยกเลิก)'} · สร้างเมื่อ ${esc(fmtTime(Date.now() / 1000))}</p>
+<p class="sub">${rep.groups.reduce((a, g) => a + g.orders.length, 0)} คำสั่งซื้อ · รวม ${baht(grand)}${rep.skipped && !opt.includeCancelled && rep.skipped.cancelled ? ` · ไม่รวมที่ยกเลิก ${rep.skipped.cancelled} รายการ` : ''}${rep.skipped && rep.skipped.unpaid ? ` · ไม่รวมที่ยังไม่จ่าย ${rep.skipped.unpaid} รายการ` : ''} · สร้างเมื่อ ${esc(fmtTime(Date.now() / 1000))}</p>
 <div class="box"><table><tr><th>เดือน</th><th class="n">คำสั่งซื้อ</th><th class="n">ยอด</th></tr>${monthRows}</table></div>
 ${sections}
 <p class="sub" style="margin-top:32px">กลุ่มที่มีป้าย "จ่ายพร้อมกัน" คือคำสั่งซื้อที่ชำระในครั้งเดียวกัน (checkout เดียวกัน) · "น่าจะจ่ายพร้อมกัน" = Shopee ไม่ได้บอก checkout id จึงเดาจากเวลาที่สั่งใกล้กันและวิธีจ่ายเดียวกัน · เลขบัตรแสดงได้เฉพาะ 4 หลักท้ายตามที่ Shopee แสดง</p>
@@ -378,7 +405,10 @@ function toCsv(header, rows) {
 function buildOutputs(orders, opt) {
   let use = orders;
   if (opt.since) use = use.filter((o) => monthKey(o.orderTime) >= opt.since || monthKey(o.orderTime) === 'unknown');
+  const skipped = { cancelled: use.filter((o) => o.cancelled).length, unpaid: use.filter((o) => o.unpaid).length };
+  use = use.filter((o) => !o.unpaid && (opt.includeCancelled || !o.cancelled));
   const rep = buildReport(use, opt);
+  rep.skipped = skipped;
   const orderRows = [];
   const itemRows = [];
   for (const g of rep.groups) {
@@ -400,8 +430,47 @@ function buildOutputs(orders, opt) {
   };
 }
 
+/**
+ * Copy of Shopee JSON with personal text removed, so its structure can be shared to debug parsing.
+ * Keeps numbers (prices, times, ids), Shopee's own label keys and payment/status words; every
+ * other string becomes "<text:N>". Long arrays are cut to their first 3 entries.
+ */
+function redact(node, key = '') {
+  if (Array.isArray(node)) return node.slice(0, 3).map((v) => redact(v, key)).concat(node.length > 3 ? [`<+${node.length - 3} more>`] : []);
+  if (node && typeof node === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(node)) out[k] = redact(v, k);
+    return out;
+  }
+  if (typeof node !== 'string') return node;
+  if (/^label_[a-z0-9_]+$/i.test(node)) return node;
+  if (/status|payment|channel|method|card|bank|type/i.test(key) && node.length <= 60 && !/\d{5,}/.test(node.replace(/[*xX•]{2,}\s*-?\s*\d{4}/g, ''))) return node;
+  return `<text:${node.length}>`;
+}
+
+/** Only the lines of an order page that carry labels this tool looks for, plus the line after each. */
+function redactPageText(text) {
+  const lines = String(text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const keep = [];
+  // Phone numbers ("(+66) 81****6789") look a lot like masked cards; a card has no digit before its stars.
+  const clean = (l) => l
+    .replace(/\(?\+\d{1,3}\)?[\d\s*xX•-]{6,}\d/g, '<phone>')
+    .replace(/\d[\d\s-]*[*xX•]{2,}[\d\s-]*\d/g, '<phone>')
+    .replace(/\b0\d{8,9}\b/g, '<phone>')
+    .replace(/\d{5,}/g, (m) => '#'.repeat(m.length)).slice(0, 80);
+  const picked = new Set();
+  lines.forEach((l, i) => {
+    if (/วิธีการชำระ|payment|เวลา|time|ยกเลิก|cancel|สถานะ|ยอดคำสั่งซื้อ|order total|บัตร|card|[*xX•]{2,}\s*\d{4}/i.test(l)) {
+      picked.add(i);
+      if (i + 1 < lines.length) picked.add(i + 1);
+    }
+  });
+  for (const i of [...picked].sort((x, y) => x - y)) keep.push(clean(lines[i]));
+  return keep.join('\n');
+}
+
 const api = {
-  PRICE_SCALE, TZ, parseOrder, ordersFromList, itemsFrom, groupOrders, buildReport, buildOutputs,
+  PRICE_SCALE, TZ, parseOrder, ordersFromList, listPage, redact, redactPageText, itemsFrom, groupOrders, buildReport, buildOutputs,
   monthKey, isoTime, baht, payLabel, cardFrom, parseShownDate,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
