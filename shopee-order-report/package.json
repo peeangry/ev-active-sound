@@ -1,0 +1,15 @@
+{
+  "name": "shopee-order-report",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monthly report of your Shopee purchases: items, totals, orders paid together, payment method and card",
+  "main": "shopee-report.js",
+  "scripts": {
+    "start": "node shopee-report.js",
+    "report": "node shopee-report.js --report-only",
+    "test": "node test/e2e.test.js"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}

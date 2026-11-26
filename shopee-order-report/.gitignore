@@ -1,0 +1,5 @@
+node_modules/
+# Logged-in browser session: never commit
+.shopee-profile/
+# Your order data
+output/
