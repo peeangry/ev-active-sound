@@ -7,9 +7,13 @@
   "scripts": {
     "start": "node shopee-report.js",
     "report": "node shopee-report.js --report-only",
-    "test": "node test/e2e.test.js"
+    "build": "node web/build.js",
+    "test": "node web/build.js && node test/bookmarklet.test.js && node test/e2e.test.js"
   },
   "dependencies": {
     "playwright": "^1.48.0"
+  },
+  "devDependencies": {
+    "terser": "^5.36.0"
   }
 }

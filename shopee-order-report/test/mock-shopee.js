@@ -67,11 +67,15 @@ function detailJson(id) {
 
 const page = (body) => `<!doctype html><meta charset="utf-8"><body>${body}</body>`;
 
-function start(port = 0) {
+function start(port = 0, { strict = false } = {}) {
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
     const loggedIn = /SPC_U=\d+/.test(req.headers.cookie || '');
     const send = (code, type, body, headers = {}) => { res.writeHead(code, { 'content-type': type, ...headers }); res.end(body); };
+    if (u.pathname.startsWith('/api/') && strict && !req.headers['x-mock-sign']) {
+      return send(200, 'application/json', '{"error":90309999,"data":null}');
+    }
+    if (u.pathname.startsWith('/api/v4/order/get_order_list')) return send(200, 'application/json', '{"error":4,"data":null}');
     if (u.pathname.startsWith('/api/v4/order/get_all_order_and_checkout_list')) {
       if (!loggedIn) return send(403, 'application/json', '{"error":19}');
       return send(200, 'application/json', JSON.stringify(listJson(Number(u.searchParams.get('offset')), Number(u.searchParams.get('limit')))));
@@ -87,7 +91,7 @@ function start(port = 0) {
       if (!loggedIn) return send(302, 'text/plain', '', { location: '/buyer/login?next=' + encodeURIComponent(u.pathname) });
       const id = u.pathname.split('/').pop();
       return send(200, 'text/html', page(`<div id=o></div><script>
-fetch('/api/v4/order/get_order_detail?order_id=${id}').then(r=>r.json()).then(j=>{
+setTimeout(()=>fetch('/api/v4/order/get_order_detail?order_id=${id}',{headers:{'x-mock-sign':'1'}}).then(r=>r.json()).then(j=>{
   const d=j.data, p=d.payment_info.payment_method;
   const t=new Date(d.processing_info.info_rows[0].info_value.value*1000+7*3600e3);
   const pad=n=>String(n).padStart(2,'0');
@@ -98,17 +102,17 @@ fetch('/api/v4/order/get_order_detail?order_id=${id}').then(r=>r.json()).then(j=
     'วิธีการชำระเงิน', p.payment_method_name, p.card_info,
     'เวลาที่สั่งซื้อ', pad(t.getUTCDate())+'-'+pad(t.getUTCMonth()+1)+'-'+t.getUTCFullYear()+' '+pad(t.getUTCHours())+':'+pad(t.getUTCMinutes()),
   ].filter(Boolean).join('\\n');
-});</script>`));
+}), 300);</script>`));
     }
     if (u.pathname.startsWith('/user/purchase')) {
       if (!loggedIn) return send(302, 'text/plain', '', { location: '/buyer/login?next=' + encodeURIComponent('/user/purchase/') });
       return send(200, 'text/html', page(`<div id=l style="min-height:120vh"></div><script>
 let off=0, busy=false, done=false;
 async function more(){ if(busy||done) return; busy=true;
-  const j=await (await fetch('/api/v4/order/get_all_order_and_checkout_list?limit=2&offset='+off)).json();
-  for(const d of j.data.order_data.details_list){ const div=document.createElement('div'); div.style.height='400px'; div.textContent=d.info_card.order_list_cards[0].shop_info.shop_name; document.getElementById('l').appendChild(div); }
+  const j=await (await fetch('/api/v4/order/get_all_order_and_checkout_list?limit=2&offset='+off,{headers:{'x-mock-sign':'1'}})).json();
+  for(const d of j.data.order_data.details_list){ const div=document.createElement('div'); div.style.height='400px'; const c=d.info_card.order_list_cards[0]; div.innerHTML='<a href="/user/purchase/order/'+c.order_id+'">'+c.shop_info.shop_name+'</a>'; document.getElementById('l').appendChild(div); }
   off+=2; if(j.data.next_offset<0) done=true; busy=false; }
-more(); addEventListener('scroll',()=>{ if(innerHeight+scrollY>=document.body.scrollHeight-50) more(); });
+setTimeout(more, 300); addEventListener('scroll',()=>{ if(innerHeight+scrollY>=document.body.scrollHeight-50) more(); });
 </script>`));
     }
     send(200, 'text/html', page('home'));
@@ -117,4 +121,4 @@ more(); addEventListener('scroll',()=>{ if(innerHeight+scrollY>=document.body.sc
 }
 
 module.exports = { start, ORDERS };
-if (require.main === module) start(8765).then(() => console.log('mock on http://127.0.0.1:8765'));
+if (require.main === module) start(8765, { strict: process.argv.includes('--strict') }).then(() => console.log('mock on http://127.0.0.1:8765'));

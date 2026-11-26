@@ -1,0 +1,211 @@
+<title>ดึงรายจ่าย Shopee</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow column of numbered steps, the drag button as the single loud element, a sample receipt-style preview below. */
+:root {
+  --bg: #f5f6f4;
+  --surface: #ffffff;
+  --fg: #1c2321;
+  --mute: #5e6965;
+  --line: #dfe3e0;
+  --accent: #0f6e5c;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3f1ed;
+  --warn-soft: #fbf3e2;
+  --font-text: "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", Tahoma, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121615; --surface: #1b211f; --fg: #e6ebe9; --mute: #9aa6a1; --line: #2d3532;
+    --accent: #4cc4a6; --accent-ink: #0b1a16; --accent-soft: #183530; --warn-soft: #33291a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121615; --surface: #1b211f; --fg: #e6ebe9; --mute: #9aa6a1; --line: #2d3532;
+  --accent: #4cc4a6; --accent-ink: #0b1a16; --accent-soft: #183530; --warn-soft: #33291a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font: 16px/1.65 var(--font-text);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+main { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+h1 { font-size: 2rem; line-height: 1.25; margin: 0 0 8px; text-wrap: balance; font-weight: 700; }
+h2 { font-size: 1.15rem; margin: 0 0 6px; text-wrap: balance; }
+p { margin: 0; }
+.lead { color: var(--mute); font-size: 1.05rem; }
+a { color: var(--accent); }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; counter-reset: s; }
+.steps > li {
+  counter-increment: s; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 18px 18px 18px 64px; position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0;
+}
+.steps > li::before {
+  content: counter(s); position: absolute; left: 18px; top: 18px; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent); font: 600 15px/30px var(--font-mono); text-align: center;
+}
+.mute { color: var(--mute); font-size: .92rem; }
+.drag {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 10px;
+  background: var(--accent); color: var(--accent-ink); font-weight: 600; text-decoration: none; cursor: grab;
+  border: 2px dashed transparent; user-select: none;
+}
+.drag:hover { border-color: var(--accent-ink); }
+.drag:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.drag svg { width: 18px; height: 18px; flex: none; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button.sec {
+  font: 500 .95rem var(--font-text); padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); cursor: pointer;
+}
+button.sec:hover { border-color: var(--accent); }
+.toast { color: var(--accent); font-size: .92rem; }
+kbd { font: 500 .85em var(--font-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; background: var(--bg); }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+details summary { cursor: pointer; font-weight: 600; }
+details > div { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+ol.plain { margin: 0; padding-left: 1.3em; }
+.hint { background: var(--warn-soft); border-radius: 8px; padding: 10px 14px; font-size: .92rem; }
+textarea#code {
+  width: 100%; height: 90px; font: 12px/1.4 var(--font-mono); border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--fg); padding: 8px; resize: vertical;
+}
+
+/* sample of what the report looks like */
+.sample { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tag-ex { align-self: flex-start; font: 500 .75rem var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--mute); border: 1px solid var(--line); border-radius: 99px; padding: 1px 9px; }
+.mhead { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; border-bottom: 2px solid var(--accent); padding-bottom: 6px; }
+.mhead b { font-size: 1.1rem; }
+.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: var(--accent-soft); border-radius: 99px; padding: 1px 10px; font-size: .85rem; }
+.grp { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.grp-h { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: .88rem; color: var(--mute); }
+.grp-h b { color: var(--fg); font-size: 1rem; }
+.pill { background: var(--accent); color: var(--accent-ink); border-radius: 4px; padding: 0 6px; font-size: .78rem; margin-right: 6px; }
+.line { display: flex; justify-content: space-between; gap: 10px; font-size: .92rem; }
+.line span:first-child { min-width: 0; }
+.shop { font-weight: 600; }
+footer { color: var(--mute); font-size: .85rem; }
+@media (prefers-reduced-motion: no-preference) { .drag { transition: transform .15s; } .drag:active { transform: scale(.97); } }
+</style>
+
+<main>
+  <header>
+    <h1>ดึงรายจ่าย Shopee</h1>
+    <p class="lead">ปุ่มเดียวบนเว็บ shopee.co.th: ดูว่าแต่ละเดือนซื้ออะไรไปเท่าไหร่ ออเดอร์ไหนจ่ายพร้อมกันจะรวมเป็นกลุ่มเดียว และบอกว่าจ่ายด้วยอะไร ถ้าเป็นบัตรเครดิตจะบอกบัตรที่ลงท้ายด้วยเลขอะไร</p>
+  </header>
+
+  <ol class="steps">
+    <li>
+      <h2>ลากปุ่มนี้ไปวางที่แถบบุ๊กมาร์ก</h2>
+      <a class="drag" id="bm" href="#" draggable="true" title="ลากไปวางที่แถบบุ๊กมาร์ก">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+        ดึงรายจ่าย Shopee
+      </a>
+      <p class="mute">ถ้าไม่เห็นแถบบุ๊กมาร์ก กด <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> (Mac: <kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>) ทำแค่ครั้งแรกครั้งเดียว</p>
+      <details>
+        <summary>ลากไม่ได้? สร้างบุ๊กมาร์กเอง</summary>
+        <div>
+          <ol class="plain">
+            <li>กดปุ่ม "คัดลอกโค้ด" ด้านล่าง</li>
+            <li>คลิกขวาที่แถบบุ๊กมาร์ก แล้วเลือก "เพิ่มหน้า..." (Add page)</li>
+            <li>ช่องชื่อใส่ <b>ดึงรายจ่าย Shopee</b> ช่อง URL ให้วางโค้ดที่คัดลอกมา แล้วกดบันทึก</li>
+          </ol>
+          <div class="row"><button class="sec" id="copy" type="button">คัดลอกโค้ด</button><span class="toast" id="copied" role="status"></span></div>
+          <textarea id="code" readonly aria-label="โค้ดบุ๊กมาร์ก"></textarea>
+        </div>
+      </details>
+    </li>
+    <li>
+      <h2>เปิด Shopee แล้ว login</h2>
+      <p>ไปที่ <a href="https://shopee.co.th/" target="_blank" rel="noopener">shopee.co.th</a> แล้ว login ตามปกติ บนคอมพิวเตอร์ (Chrome, Edge หรือ Firefox)</p>
+    </li>
+    <li>
+      <h2>กดบุ๊กมาร์ก "ดึงรายจ่าย Shopee"</h2>
+      <p>หน้าต่างจะขึ้นมาบน Shopee ให้เลือกว่าจะดึงย้อนหลังกี่เดือน แล้วกด <b>เริ่มดึงข้อมูล</b> ใช้เวลาประมาณ 1–2 วินาทีต่อออเดอร์ เปิดแท็บค้างไว้จนเสร็จ</p>
+    </li>
+    <li>
+      <h2>ดูรายงาน หรือโหลดไปเปิดใน Excel</h2>
+      <p>รายงานแสดงทันที มีปุ่มดาวน์โหลดรายงานเก็บไว้ และไฟล์ CSV สำหรับ Excel หรือ Google Sheets ครั้งต่อไปจะเร็วขึ้น เพราะออเดอร์ที่เคยดึงแล้วจะไม่ดึงซ้ำ</p>
+    </li>
+  </ol>
+
+  <section class="sample" aria-label="ตัวอย่างรายงาน">
+    <span class="tag-ex">ตัวอย่าง (ข้อมูลสมมติ)</span>
+    <div class="mhead"><b>พฤศจิกายน 2569</b><span class="num mute">฿777.00 · 4 ออเดอร์</span></div>
+    <div class="chips"><span class="chip">บัตรเครดิต/บัตรเดบิต · VISA *1234 <b>฿568.00</b></span><span class="chip">ShopeePay <b>฿209.00</b></span></div>
+    <div class="grp">
+      <div class="grp-h"><span><span class="pill">จ่ายพร้อมกัน 2 ร้าน</span>9 พ.ย. 69 12:00 · VISA *1234</span><b class="num">฿568.00</b></div>
+      <div class="line"><span><span class="shop">ร้านเสื้อ A</span> · เสื้อยืด ดำ, L ×2</span><span class="num">฿418.00</span></div>
+      <div class="line"><span><span class="shop">ร้านแก้ว B</span> · แก้วน้ำ ×1</span><span class="num">฿150.00</span></div>
+    </div>
+    <div class="grp">
+      <div class="grp-h"><span>3 พ.ย. 69 20:41 · ShopeePay</span><b class="num">฿209.00</b></div>
+      <div class="line"><span><span class="shop">ร้าน C</span> · สายชาร์จ USB-C ×1, เคส ×1</span><span class="num">฿209.00</span></div>
+    </div>
+  </section>
+
+  <details>
+    <summary>เลขบัตรเห็นได้แค่ไหน</summary>
+    <div><p>เห็นแค่ 4 หลักท้ายกับประเภทบัตร (เช่น VISA *1234) ตามที่หน้าออเดอร์ของ Shopee แสดง Shopee ไม่เคยแสดงเลขบัตรเต็มให้ใครเห็น แต่เท่านี้ก็พอให้รู้ว่าจ่ายด้วยบัตรใบไหน ออเดอร์ที่ Shopee ไม่ได้บอกเลขบัตรไว้จะแสดงแค่วิธีจ่าย</p></div>
+  </details>
+  <details>
+    <summary>ข้อมูลของฉันไปไหน</summary>
+    <div>
+      <p>ไม่ไปไหน โค้ดทำงานในแท็บ Shopee ของคุณ และอ่านข้อมูลแบบเดียวกับที่หน้า "การซื้อของฉัน" อ่าน หน้านี้และคนทำไม่ได้รับข้อมูลอะไรเลย</p>
+      <p>ออเดอร์ที่ดึงแล้วจะจำไว้ในเบราว์เซอร์นี้เพื่อให้ครั้งต่อไปเร็วขึ้น ลบได้จากปุ่ม "ลบข้อมูลที่จำไว้" ในหน้าต่างบน Shopee</p>
+      <p>ไม่ต้องให้รหัสผ่านกับใคร เพราะคุณ login กับ Shopee เอง</p>
+    </div>
+  </details>
+  <details>
+    <summary>"จ่ายพร้อมกัน" กับ "น่าจะจ่ายพร้อมกัน" ต่างกันยังไง</summary>
+    <div><p><b>จ่ายพร้อมกัน</b>: Shopee ระบุว่าออเดอร์เหล่านี้อยู่ในการชำระเงินครั้งเดียวกัน <b>น่าจะจ่ายพร้อมกัน</b>: Shopee ไม่ได้ระบุ ระบบจึงเดาจากออเดอร์ที่สั่งห่างกันไม่เกิน 2 นาทีและจ่ายด้วยวิธีเดียวกัน</p></div>
+  </details>
+  <details>
+    <summary>กดบุ๊กมาร์กแล้วไม่มีอะไรขึ้น</summary>
+    <div>
+      <p>ใช้วิธีวางโค้ดใน Console แทนได้</p>
+      <ol class="plain">
+        <li>เปิดหน้า shopee.co.th ที่ login แล้ว กด <kbd>F12</kbd> (Mac: <kbd>⌘</kbd>+<kbd>Option</kbd>+<kbd>J</kbd>) แล้วเลือกแท็บ Console</li>
+        <li>กลับมาหน้านี้ กดปุ่มด้านล่าง แล้ววางใน Console แล้วกด Enter</li>
+        <li>ถ้า Chrome เตือนเรื่องการวางโค้ด ให้พิมพ์ <kbd>allow pasting</kbd> แล้ววางใหม่</li>
+      </ol>
+      <div class="row"><button class="sec" id="copy2" type="button">คัดลอกโค้ดสำหรับ Console</button><span class="toast" id="copied2" role="status"></span></div>
+      <p class="hint">วางโค้ดใน Console เฉพาะโค้ดที่คุณรู้ที่มาเท่านั้น</p>
+    </div>
+  </details>
+
+  <footer>เครื่องมือส่วนตัว ไม่เกี่ยวข้องกับ Shopee · ถ้า Shopee เปลี่ยนหน้าเว็บ บางช่องอาจว่าง</footer>
+</main>
+
+<script>
+(function () {
+  var CODE = "__BOOKMARKLET_CODE__";
+  var url = 'javascript:' + encodeURIComponent(CODE);
+  var bm = document.getElementById('bm');
+  bm.setAttribute('href', url);
+  bm.addEventListener('click', function (e) {
+    e.preventDefault();
+    bm.querySelector('svg').nextSibling.textContent = ' ลากไปวางที่แถบบุ๊กมาร์ก (ไม่ใช่คลิก)';
+    setTimeout(function () { bm.querySelector('svg').nextSibling.textContent = ' ดึงรายจ่าย Shopee'; }, 2500);
+  });
+  var ta = document.getElementById('code');
+  ta.value = url;
+  function copier(btnId, toastId, text) {
+    document.getElementById(btnId).addEventListener('click', function () {
+      var t = document.getElementById(toastId);
+      function fallback() { ta.value = text; ta.focus(); ta.select(); t.textContent = 'เลือกโค้ดในกล่องข้อความแล้ว กด Ctrl+C (Mac: ⌘+C)'; }
+      try {
+        navigator.clipboard.writeText(text).then(function () { t.textContent = 'คัดลอกแล้ว'; }, fallback);
+      } catch (e) { fallback(); }
+    });
+  }
+  copier('copy', 'copied', url);
+  copier('copy2', 'copied2', CODE);
+})();
+</script>
